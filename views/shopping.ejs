@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <link rel="stylesheet" href="/css/style.css">
+  <title>Supermarket App</title>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg bg-dark navbar-dark">
+      <div class="container-fluid">
+        <a class="navbar-brand" href="/">Supermarket App</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#collapsibleNavbar">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="collapsibleNavbar">
+          <form class="d-flex ms-auto me-3" action="/shopping" method="GET">
+            <input class="form-control me-2" type="search" placeholder="Search products" aria-label="Search" name="q" value="<%= typeof q !== 'undefined' ? q : '' %>">
+            <select class="form-select me-2" name="sort">
+              <option value="">Sort</option>
+              <option value="price_asc">Price: Low &uarr;</option>
+              <option value="price_desc">Price: High &darr;</option>
+            </select>
+            <button class="btn btn-outline-light" type="submit">Search</button>
+          </form>
+
+          <ul class="navbar-nav">
+            <li class="nav-item me-2">
+              <a class="nav-link position-relative" href="/cart">Cart
+                <span class="badge bg-primary ms-1"><%= cartCount %></span>
+              </a>
+            </li>
+            <li class="nav-item"><a class="nav-link" href="/logout">Logout</a></li>
+          </ul>
+        </div>
+      </div>
+    </nav>
+
+  <div class="container mt-4">
+    <% if (success && success.length) { %>
+      <div class="alert alert-success"><%= success[0] %></div>
+    <% } %>
+    <% if (error && error.length) { %>
+      <div class="alert alert-danger"><%= error[0] %></div>
+    <% } %>
+
+    <% /* Prepare a set of bestseller ids for quick lookup */ %>
+    <% const bestsellerSet = new Set((typeof bestsellers !== 'undefined' ? bestsellers : []).map(id => Number(id))); %>
+
+    <p>Welcome, <%= user ? user.username : 'guest' %> (<%= user ? user.role : 'none' %>)</p>
+    <div class="text-center"><h2>Products from Supermarket</h2></div>
+    <br>
+
+    <div class="row">
+      <% products.forEach((p) => { %>
+        <div class="col-md-4 mb-3">
+          <div class="card h-100 <%= bestsellerSet.has(Number(p.id)) ? 'bestseller' : '' %> position-relative">
+            <% if (bestsellerSet.has(Number(p.id))) { %>
+              <div class="ribbon-top-left"><span>Bestseller</span></div>
+            <% } %>
+            <% if (p.image) { %>
+              <img src="/images/<%= p.image %>" class="card-img-top" style="height:160px;object-fit:cover;">
+            <% } else { %>
+              <div class="bg-light d-flex align-items-center justify-content-center" style="height:160px;">No image</div>
+            <% } %>
+            <div class="card-body d-flex flex-column">
+              <div class="d-flex justify-content-between align-items-start">
+                <h5 class="card-title"><a href="/product/<%= p.id %>"><%= p.productName %></a></h5>
+                <% if (bestsellerSet.has(Number(p.id))) { %>
+                  <div class="bestseller-badge">Bestseller</div>
+                <% } %>
+              </div>
+              <p class="mb-1">Available: <%= p.quantity %></p>
+              <p class="mb-2">Price: $<%= p.price.toFixed(2) %></p>
+
+              <form action="/add-to-cart/<%= p.id %>" method="POST" class="mt-auto d-flex">
+                <select class="form-select me-2" name="quantity" style="width:80px;">
+                  <% for (let q = 1; q <= Math.min(10, p.quantity || 10); q++) { %>
+                    <option value="<%= q %>"><%= q %></option>
+                  <% } %>
+                </select>
+                <button class="btn btn-primary">Add</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+  </div>
+</body>
+</html>
