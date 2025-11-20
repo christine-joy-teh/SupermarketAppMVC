@@ -1,0 +1,70 @@
+<%
+  const brandHref = typeof navBrandHref !== 'undefined' ? navBrandHref : '/';
+  const brandLabel = typeof navBrandLabel !== 'undefined' ? navBrandLabel : 'Supermarket App';
+  const leftLinks = (typeof navLinksLeft !== 'undefined' && Array.isArray(navLinksLeft)) ? navLinksLeft : [];
+  const rightLinks = (typeof navLinksRight !== 'undefined' && Array.isArray(navLinksRight)) ? navLinksRight : [];
+  const search = typeof searchConfig !== 'undefined' ? searchConfig : null;
+%>
+<nav class="navbar navbar-expand-lg bg-dark navbar-dark">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="<%= brandHref %>"><%= brandLabel %></a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#collapsibleNavbar">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="collapsibleNavbar">
+      <% if (leftLinks.length) { %>
+        <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+          <% leftLinks.forEach(link => { %>
+            <% if (link && link.textOnly) { %>
+              <li class="nav-item d-flex align-items-center <%= link.className || '' %>">
+                <small class="<%= link.textClass || 'text-white-50' %>"><%= link.text %></small>
+              </li>
+            <% } else if (link) { %>
+              <li class="nav-item">
+                <a class="nav-link <%= link.classes || '' %> <%= link.active ? 'active' : '' %>" href="<%= link.href || '#' %>">
+                  <%= link.label %>
+                  <% if (typeof link.badgeValue !== 'undefined') { %>
+                    <span class="badge <%= link.badgeClass || 'bg-primary' %> ms-1"><%= link.badgeValue %></span>
+                  <% } %>
+                </a>
+              </li>
+            <% } %>
+          <% }) %>
+        </ul>
+      <% } %>
+
+      <% if (search) { %>
+        <form class="search-bar d-flex flex-column flex-md-row align-items-stretch align-items-md-center ms-auto me-3 gap-2" action="<%= search.action || '/' %>" method="<%= search.method || 'GET' %>">
+          <input class="form-control <%= search.inputClass || '' %>" type="search" placeholder="<%= search.placeholder || 'Search products' %>" aria-label="Search" name="<%= search.queryName || 'q' %>" value="<%= typeof search.queryValue !== 'undefined' ? search.queryValue : '' %>">
+          <% if (Array.isArray(search.sortOptions) && search.sortOptions.length) { %>
+            <select class="form-select <%= search.selectClass || '' %>" name="<%= search.sortName || 'sort' %>">
+              <% search.sortOptions.forEach(opt => { %>
+                <option value="<%= opt.value %>" <%= (search.sortValue === opt.value) ? 'selected' : '' %>><%= opt.label %></option>
+              <% }) %>
+            </select>
+          <% } %>
+          <button class="btn <%= search.buttonClass || 'btn-outline-light' %>" type="submit"><%= search.buttonLabel || 'Search' %></button>
+        </form>
+      <% } %>
+
+      <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+        <% rightLinks.forEach(link => { %>
+          <% if (link && link.textOnly) { %>
+            <li class="nav-item d-flex align-items-center <%= link.className || '' %>">
+              <small class="<%= link.textClass || 'text-white-50' %>"><%= link.text %></small>
+            </li>
+          <% } else if (link) { %>
+            <li class="nav-item">
+              <a class="nav-link <%= link.classes || '' %> <%= link.active ? 'active' : '' %>" href="<%= link.href || '#' %>">
+                <%= link.label %>
+                <% if (typeof link.badgeValue !== 'undefined') { %>
+                  <span class="badge <%= link.badgeClass || 'bg-primary' %> ms-1"><%= link.badgeValue %></span>
+                <% } %>
+              </a>
+            </li>
+          <% } %>
+        <% }) %>
+      </ul>
+    </div>
+  </div>
+</nav>

@@ -4,7 +4,10 @@ const multer = require('multer');
 const session = require('express-session');
 const flash = require('connect-flash');
 const productController = require('./controllers/productController');
+const orderController = require('./controllers/orderController');
 const ProductModel = require('./models/productModel');
+
+const { attachSessionLocals, checkAuthenticated, checkAdmin } = require('./middleware');
 const app = express();
 
 // Set up multer for file uploads
@@ -53,34 +56,8 @@ app.use(session({
 
 app.use(flash());
 
-// Expose common template variables to all views
-app.use((req, res, next) => {
-    res.locals.user = req.session.user || null;
-    // cartCount counts total quantity of items
-    res.locals.cartCount = req.session.cart ? req.session.cart.reduce((sum, it) => sum + (it.quantity || 0), 0) : 0;
-    res.locals.success = req.flash('success');
-    res.locals.error = req.flash('error');
-    next();
-});
-// Middleware to check if user is logged in
-const checkAuthenticated = (req, res, next) => {
-    if (req.session.user) {
-        return next();
-    } else {
-        req.flash('error', 'Please log in to view this resource');
-        res.redirect('/login');
-    }
-};
-
-// Middleware to check if user is admin
-const checkAdmin = (req, res, next) => {
-    if (req.session.user && req.session.user.role === 'admin') {
-        return next();
-    } else {
-        req.flash('error', 'Access denied');
-        res.redirect('/shopping');
-    }
-};
+// Expose common template variables + session helpers
+app.use(attachSessionLocals);
 
 // Routes
 
@@ -97,6 +74,10 @@ app.get('/register', (req, res) => {
     const plan = req.query.plan || '';
     res.render('register', { messages: req.flash('error'), formData: {}, plan });
 });
+
+// Orders API (admin list + detail for owner/admin)
+app.get('/orders', checkAuthenticated, checkAdmin, (req, res) => orderController.list(req, res));
+app.get('/orders/:id', checkAuthenticated, (req, res) => orderController.detail(req, res));
 
 // POST route to handle registration
 app.post('/register', (req, res) => {
@@ -304,57 +285,8 @@ app.post('/add-to-cart/:id', checkAuthenticated, async (req, res) => {
     }
 });
 
-// Checkout route - simulate purchase and clear cart
-app.post('/checkout', checkAuthenticated, (req, res) => {
-    const cart = req.session.cart || [];
-    if (cart.length === 0) {
-        req.flash('error', 'Your cart is empty.');
-        return res.redirect('/cart');
-    }
-    // Use same cross-SKU promotion used in the cart preview: Buy 2 get 1 free across all dairy items (cheapest of each 3 free)
-    const dairyKeywords = ['milk','yogurt','cheese','butter','dairy'];
-
-    let totalBefore = 0;
-    let nonDairyTotal = 0;
-    const dairyUnitPrices = [];
-
-    cart.forEach(it => {
-        const name = (it.productName || '').toLowerCase();
-        const price = parseFloat(it.price) || 0;
-        const qty = parseInt(it.quantity) || 0;
-        totalBefore += price * qty;
-        const isDairy = dairyKeywords.some(k => name.includes(k));
-        if (isDairy) {
-            for (let i = 0; i < qty; i++) dairyUnitPrices.push(price);
-        } else {
-            nonDairyTotal += price * qty;
-        }
-    });
-
-    // sort descending and make every 3rd item free (matches cart preview logic)
-    dairyUnitPrices.sort((a, b) => b - a);
-    let dairyCharge = 0;
-    let dairySavings = 0;
-    for (let i = 0; i < dairyUnitPrices.length; i++) {
-        if ((i % 3) === 2) {
-            dairySavings += dairyUnitPrices[i];
-        } else {
-            dairyCharge += dairyUnitPrices[i];
-        }
-    }
-
-    const totalAfter = nonDairyTotal + dairyCharge;
-    const totalSavings = (totalBefore - totalAfter) || 0;
-
-    // In a real app you'd create an order record here. We'll simulate success and show savings.
-    req.session.cart = [];
-    if (totalSavings > 0) {
-        req.flash('success', `Checkout successful! Total: $${totalAfter.toFixed(2)} (you saved $${totalSavings.toFixed(2)} from promotions)`);
-    } else {
-        req.flash('success', `Checkout successful! Total: $${totalAfter.toFixed(2)}`);
-    }
-    res.redirect('/shopping');
-});
+// Checkout route now handled by OrderController (persists the order)
+app.post('/checkout', checkAuthenticated, (req, res) => orderController.checkout(req, res));
 
 
 // Logout route - Destroy session and log the user out

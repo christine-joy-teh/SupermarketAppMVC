@@ -12,7 +12,7 @@ body{
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
   /* Page background image (no translucency) */
   background-color: var(--bg);
-  background-image: url('/images/grocery-store-or-supermarket-with-food-product-shelves-racks-dairy-fruits-and-drinks-for-shopping-in-flat-cartoon-hand-drawn-templates-illustration-vector.jpg');
+  background-image: url('/images/background.jpg');
   background-repeat: no-repeat;
   background-position: center top;
   background-attachment: fixed;
@@ -43,6 +43,30 @@ body::after{
   box-shadow: 0 2px 8px rgba(16,24,40,0.06);
 }
 .navbar-brand{font-weight:700; letter-spacing:0.2px}
+.navbar .search-bar{
+  max-width: 620px;
+}
+.navbar .search-bar .form-control,
+.navbar .search-bar .form-select{
+  min-width: 200px;
+}
+.navbar .search-bar button{
+  white-space: nowrap;
+  height: 100%;
+}
+@media (max-width:768px){
+  .navbar .search-bar{
+    width:100%;
+    max-width:none;
+  }
+  .navbar .search-bar .form-control,
+  .navbar .search-bar .form-select{
+    min-width:100%;
+  }
+  .navbar .search-bar button{
+    width:100%;
+  }
+}
 
 .py-5{
   background: linear-gradient(90deg, rgba(31,111,235,0.06), rgba(99,102,241,0.03));
@@ -158,8 +182,128 @@ body::after{
 .register-card h3{ font-weight:700 }
 .register-card p{text-align:left}
 
+/* Inventory page styling */
+.inventory-page{
+  min-height:100vh;
+  color:#0f172a;
+}
+.inventory-container{
+  max-width:1100px;
+}
+.inventory-card{
+  border-radius:18px;
+  border:1px solid rgba(15,23,42,0.08);
+  background:rgba(255,255,255,0.94);
+  box-shadow:0 25px 45px rgba(15,23,42,0.16);
+  backdrop-filter:blur(4px);
+}
+.inventory-heading h3{
+  font-weight:700;
+  color:#111827;
+}
+.add-product-btn{
+  border-radius:999px;
+  padding:0.65rem 1.4rem;
+  font-weight:600;
+  display:flex;
+  align-items:center;
+  background:linear-gradient(90deg,var(--brand),#4f83ff);
+  box-shadow:0 12px 30px rgba(31,111,235,0.25);
+  border:none;
+}
+.add-product-btn span{
+  font-size:1.3rem;
+  line-height:1;
+}
+.product-table{
+  border-collapse:separate;
+  border-spacing:0 10px;
+}
+.product-table thead{
+  background:transparent;
+  text-transform:uppercase;
+  font-size:0.8rem;
+  letter-spacing:0.8px;
+  color:#6b7280;
+}
+.product-table thead th{
+  border-bottom:1px solid rgba(15,23,42,0.08);
+  font-weight:600;
+}
+.product-row{
+  background:#ffffff;
+  border-radius:14px;
+  box-shadow:0 10px 30px rgba(15,23,42,0.06);
+  transition:transform .14s ease, box-shadow .14s ease;
+}
+.product-row:hover{
+  transform:translateY(-3px);
+  box-shadow:0 18px 36px rgba(15,23,42,0.14);
+}
+.product-row td{
+  border-bottom:none;
+  padding:1rem 0.75rem;
+}
+.product-name{
+  font-weight:600;
+  color:#1d4ed8;
+  text-decoration:none;
+}
+.product-name:hover{
+  color:#1e40af;
+  text-decoration:underline;
+}
+.inventory-image{
+  width:86px;
+  height:86px;
+  object-fit:cover;
+  border-radius:12px;
+  box-shadow:0 8px 18px rgba(15,23,42,0.12);
+  border:1px solid rgba(15,23,42,0.05);
+}
+.inventory-quantity{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:62px;
+  padding:0.45rem 0.65rem;
+  border-radius:999px;
+  font-weight:700;
+  background:rgba(15,23,42,0.08);
+  color:#111827;
+}
+.inventory-price{
+  font-weight:700;
+  color:#059669;
+  font-size:1rem;
+}
+.soft-btn{
+  border-radius:999px;
+  padding:0.35rem 1rem;
+  border-width:1px;
+}
+.soft-btn.btn-outline-primary{
+  border-color:rgba(31,111,235,0.5);
+  color:#1f6feb;
+}
+.soft-btn.btn-outline-primary:hover{
+  background:rgba(31,111,235,0.08);
+}
+.soft-btn.btn-outline-danger{
+  border-color:rgba(239,68,68,0.45);
+  color:#dc2626;
+}
+.soft-btn.btn-outline-danger:hover{
+  background:rgba(239,68,68,0.08);
+}
+
 @media (max-width:768px){
   .plan-card{ width:100%; max-width:420px }
+  .inventory-page .inventory-card{ padding:1.4rem; }
+  .product-table{ border-spacing:0; }
+  .product-row td{ padding:0.75rem; }
+  .inventory-image{ width:70px; height:70px; }
+  .add-product-btn{ width:100%; justify-content:center; }
 }
 
 
