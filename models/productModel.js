@@ -34,10 +34,11 @@ async function create({ name, quantity, price, image }) {
 }
 
 async function update(id, { name, quantity, price, image }) {
-  await db.query(
+  const [result] = await db.query(
     'UPDATE products SET productName = ?, quantity = ?, price = ?, image = ? WHERE id = ?',
     [name, quantity, price, image || null, id]
   );
+  return result;
 }
 
 async function remove(id) {

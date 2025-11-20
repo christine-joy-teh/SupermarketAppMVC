@@ -5,6 +5,7 @@ const session = require('express-session');
 const flash = require('connect-flash');
 const productController = require('./controllers/productController');
 const orderController = require('./controllers/orderController');
+const userAdminController = require('./controllers/userAdminController');
 const ProductModel = require('./models/productModel');
 
 const { attachSessionLocals, checkAuthenticated, checkAdmin } = require('./middleware');
@@ -203,6 +204,23 @@ app.get('/deleteProduct/:id', checkAuthenticated, checkAdmin, (req, res) => {
 
 app.get('/shopping', checkAuthenticated, (req, res) => {
     productController.renderShopping(req, res);
+});
+
+// Admin: manage users
+app.get('/admin/users', checkAuthenticated, checkAdmin, (req, res) => {
+    userAdminController.list(req, res);
+});
+
+app.get('/admin/users/:id/edit', checkAuthenticated, checkAdmin, (req, res) => {
+    userAdminController.renderEdit(req, res);
+});
+
+app.post('/admin/users/:id', checkAuthenticated, checkAdmin, (req, res) => {
+    userAdminController.update(req, res);
+});
+
+app.post('/admin/users/:id/delete', checkAuthenticated, checkAdmin, (req, res) => {
+    userAdminController.remove(req, res);
 });
 
 // Cart route - Displays the cart

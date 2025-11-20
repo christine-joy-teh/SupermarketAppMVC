@@ -80,14 +80,30 @@ async function renderUpdate(req, res) {
 
 async function update(req, res) {
   try {
-    const { name, quantity, price, currentImage } = req.body;
+    const { name, currentImage } = req.body;
+    const qty = Number(req.body.quantity);
+    const price = Number(req.body.price);
+    const productId = req.params.id;
+
+    // Basic validation to avoid silent failures/NaN writes
+    if (!name || Number.isNaN(qty) || qty < 0 || Number.isNaN(price) || price < 0) {
+      req.flash('error', 'Please enter a valid name, non-negative quantity, and non-negative price.');
+      return res.redirect(`/updateProduct/${productId}`);
+    }
+
     const image = req.file ? req.file.filename : currentImage;
-    await Product.update(req.params.id, { name, quantity, price, image });
-    req.flash('success', 'Product updated');
+    const result = await Product.update(productId, { name, quantity: qty, price, image });
+
+    if (result && result.affectedRows === 0) {
+      req.flash('error', 'Product not found or not updated.');
+    } else {
+      req.flash('success', 'Product updated');
+    }
     res.redirect('/inventory');
   } catch (err) {
     console.error('Error updating product:', err.message);
-    res.status(500).send('Error updating product');
+    req.flash('error', 'Error updating product.');
+    res.redirect('/inventory');
   }
 }
 

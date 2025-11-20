@@ -2,7 +2,8 @@
 <%- include('partials/navbar', {
   navLinksLeft: [
     { href: '/inventory', label: 'Inventory', active: true },
-    { href: '/addProduct', label: 'Add Product' }
+    { href: '/addProduct', label: 'Add Product' },
+    { href: '/admin/users', label: 'Users' }
   ],
   navLinksRight: [
     { textOnly: true, text: `Welcome, ${user ? user.username : ''} (${user ? user.role : ''})`, className: 'me-3', textClass: 'text-white' },
