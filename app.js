@@ -76,9 +76,13 @@ app.get('/register', (req, res) => {
     res.render('register', { messages: req.flash('error'), formData: {}, plan });
 });
 
-// Orders API (admin list + detail for owner/admin)
+// Orders API (admin list) and user history/detail
 app.get('/orders', checkAuthenticated, checkAdmin, (req, res) => orderController.list(req, res));
+app.get('/orders/history', checkAuthenticated, (req, res) => orderController.renderUserOrders(req, res));
 app.get('/orders/:id', checkAuthenticated, (req, res) => orderController.detail(req, res));
+app.get('/admin/orders', checkAuthenticated, checkAdmin, (req, res) => orderController.renderAdminOrders(req, res));
+app.post('/admin/orders/:id/status', checkAuthenticated, checkAdmin, (req, res) => orderController.updateStatus(req, res));
+app.post('/admin/orders/:id/delete', checkAuthenticated, checkAdmin, (req, res) => orderController.remove(req, res));
 
 // POST route to handle registration
 app.post('/register', (req, res) => {
@@ -223,48 +227,17 @@ app.post('/admin/users/:id/delete', checkAuthenticated, checkAdmin, (req, res) =
     userAdminController.remove(req, res);
 });
 
+// Admin promotion management
+app.get('/admin/promotion', checkAuthenticated, checkAdmin, (req, res) => orderController.renderPromotion(req, res));
+app.post('/admin/promotion', checkAuthenticated, checkAdmin, (req, res) => orderController.updatePromotion(req, res));
+
 // Cart route - Displays the cart
 app.get('/cart', checkAuthenticated, (req, res) => {
     const cart = req.session.cart || [];
 
-    // Compute promotion preview for cart: Buy 2 get 1 free across all dairy items (cheapest of each 3 free)
-    const dairyKeywords = ['milk','yogurt','cheese','butter','dairy'];
-    let totalBefore = 0;
-    let nonDairyTotal = 0;
-    const dairyUnitPrices = [];
-
-    cart.forEach(it => {
-        const name = (it.productName || '').toLowerCase();
-        const price = parseFloat(it.price) || 0;
-        const qty = parseInt(it.quantity) || 0;
-        totalBefore += price * qty;
-        const isDairy = dairyKeywords.some(k => name.includes(k));
-        if (isDairy) {
-            for (let i = 0; i < qty; i++) dairyUnitPrices.push(price);
-        } else {
-            nonDairyTotal += price * qty;
-        }
-    });
-
-    // Calculate dairy charges after promotion
-    let dairyCharge = 0;
-    let dairySavings = 0;
-    if (dairyUnitPrices.length > 0) {
-        // sort descending so within each group of 3 the cheapest (3rd) becomes free
-        dairyUnitPrices.sort((a,b) => b - a);
-        for (let i = 0; i < dairyUnitPrices.length; i++) {
-            if ((i % 3) === 2) {
-                dairySavings += dairyUnitPrices[i];
-            } else {
-                dairyCharge += dairyUnitPrices[i];
-            }
-        }
-    }
-
-    const totalAfter = nonDairyTotal + dairyCharge;
-    const totalSavings = (totalBefore - totalAfter) || 0;
-
-    res.render('cart', { cart, promo: { totalBefore, totalAfter, totalSavings, dairyCount: dairyUnitPrices.length } });
+    // Use the shared promotion logic from OrderController
+    const promo = orderController.summarizeCart(cart);
+    res.render('cart', { cart, promo });
 });
 
 // Add to cart route
@@ -281,6 +254,9 @@ app.post('/add-to-cart/:id', checkAuthenticated, async (req, res) => {
             req.session.cart = [];
         }
 
+        const discount = Number(product.discountPercent) || 0;
+        const finalPrice = discount > 0 ? product.price * (1 - discount / 100) : product.price;
+
         // Check if the product is already in the cart
         const existingItem = req.session.cart.find(item => item.productId === productId);
         if (existingItem) {
@@ -289,7 +265,8 @@ app.post('/add-to-cart/:id', checkAuthenticated, async (req, res) => {
             req.session.cart.push({
                 productId: product.id,
                 productName: product.productName,
-                price: product.price,
+                price: finalPrice,
+                originalPrice: product.price,
                 quantity: quantity,
                 image: product.image
             });
@@ -301,6 +278,55 @@ app.post('/add-to-cart/:id', checkAuthenticated, async (req, res) => {
         console.error('Database query error:', error.message);
         res.status(500).send('Error retrieving product');
     }
+});
+
+// Update item quantity in cart (set to new value; 0 removes)
+app.post('/cart/item/:id/update', checkAuthenticated, (req, res) => {
+    const productId = Number(req.params.id);
+    const qty = Number(req.body.quantity);
+    if (!Number.isFinite(productId)) {
+        req.flash('error', 'Invalid product.');
+        return res.redirect('/cart');
+    }
+    if (!Number.isFinite(qty) || qty < 0) {
+        req.flash('error', 'Quantity must be 0 or more.');
+        return res.redirect('/cart');
+    }
+
+    const cart = req.session.cart || [];
+    const idx = cart.findIndex(item => Number(item.productId) === productId);
+    if (idx === -1) {
+        req.flash('error', 'Item not found in cart.');
+        return res.redirect('/cart');
+    }
+
+    if (qty === 0) {
+        cart.splice(idx, 1);
+        req.flash('success', 'Item removed from cart.');
+    } else {
+        cart[idx].quantity = qty;
+        req.flash('success', 'Cart updated.');
+    }
+    req.session.cart = cart;
+    res.redirect('/cart');
+});
+
+// Delete item from cart
+app.post('/cart/item/:id/delete', checkAuthenticated, (req, res) => {
+    const productId = Number(req.params.id);
+    if (!Number.isFinite(productId)) {
+        req.flash('error', 'Invalid product.');
+        return res.redirect('/cart');
+    }
+    const cart = req.session.cart || [];
+    const nextCart = cart.filter(item => Number(item.productId) !== productId);
+    if (nextCart.length === cart.length) {
+        req.flash('error', 'Item not found in cart.');
+    } else {
+        req.flash('success', 'Item removed from cart.');
+    }
+    req.session.cart = nextCart;
+    res.redirect('/cart');
 });
 
 // Checkout route now handled by OrderController (persists the order)
