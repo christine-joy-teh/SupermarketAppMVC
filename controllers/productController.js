@@ -56,9 +56,10 @@ function renderAdd(req, res) {
 
 async function create(req, res) {
   try {
-    const { name, quantity, price } = req.body;
+    const { name, quantity, price, discountPercent } = req.body;
     const image = req.file ? req.file.filename : null;
-    await Product.create({ name, quantity, price, image });
+    const discount = Math.max(0, Math.min(100, Number(discountPercent) || 0));
+    await Product.create({ name, quantity, price, image, discountPercent: discount });
     req.flash('success', 'Product added');
     res.redirect('/inventory');
   } catch (err) {
@@ -80,7 +81,7 @@ async function renderUpdate(req, res) {
 
 async function update(req, res) {
   try {
-    const { name, currentImage } = req.body;
+    const { name, currentImage, discountPercent } = req.body;
     const qty = Number(req.body.quantity);
     const price = Number(req.body.price);
     const productId = req.params.id;
@@ -92,7 +93,8 @@ async function update(req, res) {
     }
 
     const image = req.file ? req.file.filename : currentImage;
-    const result = await Product.update(productId, { name, quantity: qty, price, image });
+    const discount = Math.max(0, Math.min(100, Number(discountPercent) || 0));
+    const result = await Product.update(productId, { name, quantity: qty, price, image, discountPercent: discount });
 
     if (result && result.affectedRows === 0) {
       req.flash('error', 'Product not found or not updated.');

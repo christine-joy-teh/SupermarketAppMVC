@@ -2,6 +2,7 @@
 <%- include('partials/navbar', {
   navLinksRight: [
     { href: '/cart', label: 'Cart', badgeValue: cartCount, badgeClass: 'bg-primary', classes: 'position-relative' },
+    { href: '/orders/history', label: 'My Orders' },
     { href: '/shopping', label: 'Shop' },
     { href: '/logout', label: 'Logout' }
   ]
@@ -25,9 +26,10 @@
           <tr>
             <th>Product</th>
             <th>Image</th>
-            <th>Quantity</th>
+            <th style="width: 180px;">Quantity</th>
             <th>Price</th>
             <th>Total</th>
+            <th class="text-center" style="width: 140px;">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -36,9 +38,28 @@
             <tr>
                 <td><%= cart[i].productName %></td>
                 <td><img src="/images/<%= cart[i].image %>" width="80" class="img-thumbnail"></td>
-                <td><%= cart[i].quantity %></td>
-                <td>$<%= cart[i].price.toFixed(2) %></td>
+                <td>
+                  <form action="/cart/item/<%= cart[i].productId %>/update" method="POST" class="d-flex align-items-center gap-2">
+                    <input type="number" name="quantity" min="0" step="1" value="<%= cart[i].quantity %>" class="form-control form-control-sm" style="width: 80px;">
+                    <button type="submit" class="btn btn-sm btn-outline-primary">Update</button>
+                  </form>
+                </td>
+                <td>
+                  <% const orig = typeof cart[i].originalPrice !== 'undefined' ? Number(cart[i].originalPrice) : Number(cart[i].price); %>
+                  <% const sale = Number(cart[i].price); %>
+                  <% if (orig > sale) { %>
+                    <span class="text-muted text-decoration-line-through">$<%= orig.toFixed(2) %></span>
+                    <span class="ms-1 fw-bold text-success">$<%= sale.toFixed(2) %></span>
+                  <% } else { %>
+                    $<%= sale.toFixed(2) %>
+                  <% } %>
+                </td>
                 <td>$<%= (cart[i].price * cart[i].quantity).toFixed(2) %></td>
+                <td class="text-center">
+                  <form action="/cart/item/<%= cart[i].productId %>/delete" method="POST" onsubmit="return confirm('Remove this item?');">
+                    <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                  </form>
+                </td>
             </tr>
             <% total += cart[i].price * cart[i].quantity; %>
           <% } %>
@@ -48,9 +69,17 @@
         <div>
           <% const promoDetails = (typeof promo !== 'undefined' && promo) ? promo : null; %>
           <h5 class="mb-1">Subtotal: $<%= total.toFixed(2) %></h5>
-          <% if (promoDetails && promoDetails.totalSavings > 0) { %>
-            <div class="text-success">Promotion applied: -$<%= promoDetails.totalSavings.toFixed(2) %> (<%= promoDetails.dairyCount %> dairy items)</div>
-            <h4 class="mt-2">Total: $<%= promoDetails.totalAfter.toFixed(2) %></h4>
+          <% if (promoDetails) { %>
+            <div class="text-muted small">
+              Promo: <%= promoDetails.promo && promoDetails.promo.percent ? promoDetails.promo.percent : 0 %>% off
+              <%= promoDetails.promo && promoDetails.promo.keywords ? promoDetails.promo.keywords.join(', ') : 'selected items' %>
+            </div>
+            <% if (promoDetails.totalSavings > 0) { %>
+              <div class="text-success">Promotion applied: -$<%= promoDetails.totalSavings.toFixed(2) %></div>
+              <h4 class="mt-2">Total: $<%= promoDetails.totalAfter.toFixed(2) %></h4>
+            <% } else { %>
+              <h4 class="mt-2">Total: $<%= total.toFixed(2) %></h4>
+            <% } %>
           <% } else { %>
             <h4 class="mt-2">Total: $<%= total.toFixed(2) %></h4>
           <% } %>
