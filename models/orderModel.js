@@ -1,6 +1,11 @@
 const db = require('../config/db');
 
-const tableReady = ensureOrdersTable().catch(err => {
+let columnCache;
+
+const tableReady = ensureOrdersTable().then(cols => {
+  columnCache = cols;
+  return cols;
+}).catch(err => {
   console.error('Failed to ensure orders table:', err.message);
 });
 
@@ -17,6 +22,60 @@ async function ensureOrdersTable() {
       createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Ensure required columns exist (for older tables)
+  const dbName =
+    (db.config && db.config.connectionConfig && db.config.connectionConfig.database) ||
+    (db.config && db.config.database) ||
+    process.env.DB_NAME;
+
+  async function ensureColumn(column, ddl) {
+    const [rows] = await db.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'orders' AND COLUMN_NAME = ?`,
+      [dbName, column]
+    );
+    if (!rows.length) {
+      try {
+        await db.query(`ALTER TABLE orders ADD COLUMN ${ddl}`);
+      } catch (err) {
+        if (err.code !== 'ER_DUP_FIELDNAME') {
+          console.warn(`orders table migration (${column}) skipped:`, err.message);
+        }
+      }
+    }
+  }
+
+  await ensureColumn('userId', 'userId INT NULL');
+  await ensureColumn('user_id', 'user_id INT NULL');
+  await ensureColumn('subtotal', 'subtotal DECIMAL(10,2) DEFAULT 0');
+  await ensureColumn('total', 'total DECIMAL(10,2) DEFAULT 0');
+  await ensureColumn('savings', 'savings DECIMAL(10,2) DEFAULT 0');
+  await ensureColumn('status', "status VARCHAR(50) DEFAULT 'processing'");
+  await ensureColumn('itemsJson', 'itemsJson LONGTEXT');
+  await ensureColumn('createdAt', 'createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
+  await ensureColumn('deliveryMethod', "deliveryMethod VARCHAR(50) DEFAULT 'delivery'");
+
+  // Loosen existing columns that might be NOT NULL without defaults
+  try {
+    await db.query('ALTER TABLE orders MODIFY COLUMN user_id INT NULL');
+  } catch (err) {
+    if (err.code !== 'ER_BAD_FIELD_ERROR') {
+      console.warn('orders table migration (alter user_id) skipped:', err.message);
+    }
+  }
+  try {
+    await db.query('ALTER TABLE orders MODIFY COLUMN userId INT NULL');
+  } catch (err) {
+    if (err.code !== 'ER_BAD_FIELD_ERROR') {
+      console.warn('orders table migration (alter userId) skipped:', err.message);
+    }
+  }
+
+  const [colRows] = await db.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'orders'`,
+    [dbName]
+  );
+  return colRows.map(r => r.COLUMN_NAME);
 }
 
 function sanitizeCartItems(items = []) {
@@ -39,23 +98,32 @@ function mapOrderRow(row) {
       console.warn('Unable to parse itemsJson for order', row.id, err.message);
     }
   }
-  return { ...row, items };
+  const userId = typeof row.userId !== 'undefined' && row.userId !== null
+    ? row.userId
+    : (typeof row.user_id !== 'undefined' ? row.user_id : null);
+  return { ...row, userId, items };
 }
 
-async function createOrder({ userId, subtotal, total, savings, status = 'processing', cartItems = [] }) {
+async function createOrder({ userId, subtotal, total, savings, status = 'processing', cartItems = [], deliveryMethod = 'delivery' }) {
   await tableReady;
   const normalizedItems = sanitizeCartItems(cartItems);
-  const [result] = await db.query(
-    'INSERT INTO orders (userId, subtotal, total, savings, status, itemsJson) VALUES (?, ?, ?, ?, ?, ?)',
-    [
-      userId || null,
-      subtotal || 0,
-      total || 0,
-      savings || 0,
-      status,
-      JSON.stringify(normalizedItems)
-    ]
-  );
+  // Always write to both userId and user_id (both columns are created in ensureOrdersTable)
+  const sql = `
+    INSERT INTO orders (userId, user_id, subtotal, total, savings, status, itemsJson, deliveryMethod)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `;
+  const params = [
+    userId || null,
+    userId || null,
+    subtotal || 0,
+    total || 0,
+    savings || 0,
+    status,
+    JSON.stringify(normalizedItems),
+    deliveryMethod || 'delivery'
+  ];
+
+  const [result] = await db.query(sql, params);
   return { id: result.insertId, userId, subtotal, total, savings, status, items: normalizedItems };
 }
 
@@ -74,7 +142,10 @@ async function getOrderById(id) {
 
 async function getOrdersByUser(userId) {
   await tableReady;
-  const [rows] = await db.query('SELECT * FROM orders WHERE userId = ? ORDER BY id DESC', [userId]);
+  const [rows] = await db.query(
+    'SELECT * FROM orders WHERE (userId = ? OR user_id = ?) ORDER BY id DESC',
+    [userId, userId]
+  );
   return rows.map(mapOrderRow);
 }
 
@@ -83,10 +154,16 @@ async function updateOrderStatus(id, status) {
   await db.query('UPDATE orders SET status = ? WHERE id = ?', [status, id]);
 }
 
+async function deleteOrder(id) {
+  await tableReady;
+  await db.query('DELETE FROM orders WHERE id = ?', [id]);
+}
+
 module.exports = {
   createOrder,
   getAllOrders,
   getOrderById,
   getOrdersByUser,
-  updateOrderStatus
+  updateOrderStatus,
+  deleteOrder
 };
