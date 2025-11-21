@@ -81,15 +81,6 @@
                       <div class="invalid-feedback">Please enter a contact number.</div>
                     </div>
 
-                    <div class="mb-3">
-                      <label for="role" class="form-label">Role</label>
-                      <select id="role" name="role" class="form-select" required>
-                        <option value="user" <%= formData && formData.role === 'user' ? 'selected' : '' %>>User</option>
-                        <option value="admin" <%= formData && formData.role === 'admin' ? 'selected' : '' %>>Admin</option>
-                      </select>
-                      <div class="invalid-feedback">Please choose a role.</div>
-                    </div>
-
                     <div class="form-check mb-3">
                       <input class="form-check-input" type="checkbox" value="1" id="agree" required>
                       <label class="form-check-label small" for="agree">I agree to the <a href="#">terms & conditions</a>.</label>

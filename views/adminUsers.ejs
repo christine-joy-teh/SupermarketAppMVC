@@ -1,0 +1,83 @@
+<%- include('partials/head', { pageTitle: 'Manage Users - Supermarket App' }) %>
+<%- include('partials/navbar', {
+  navLinksLeft: [
+    { href: '/inventory', label: 'Inventory' },
+    { href: '/addProduct', label: 'Add Product' },
+    { href: '/admin/orders', label: 'Orders' },
+    { href: '/admin/promotion', label: 'Promotion' },
+    { href: '/admin/users', label: 'Users', active: true }
+  ],
+  navLinksRight: [
+    { href: '/logout', label: 'Logout' }
+  ]
+}) %>
+
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <p class="text-uppercase text-muted small mb-1">Admin</p>
+      <h3 class="mb-0">User Accounts</h3>
+      <small class="text-muted">Manage roles and contact details</small>
+    </div>
+  </div>
+
+  <% if (success && success.length) { %>
+    <div class="alert alert-success"><%= success[0] %></div>
+  <% } %>
+  <% if (error && error.length) { %>
+    <div class="alert alert-danger"><%= error[0] %></div>
+  <% } %>
+
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Username</th>
+          <th>Email</th>
+          <th>Role</th>
+          <th>Plan</th>
+          <th>Contact</th>
+          <th>Address</th>
+          <th class="text-center">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% if (users && users.length) { %>
+          <% users.forEach(u => { %>
+            <tr>
+              <td><%= u.id %></td>
+              <td><%= u.username %></td>
+              <td><%= u.email %></td>
+              <td><span class="badge bg-secondary text-uppercase"><%= u.role %></span></td>
+              <td>
+                <% if (typeof u.plan === 'undefined') { %>
+                  <span class="text-muted">n/a</span>
+                <% } else if (!u.plan) { %>
+                  <span class="badge bg-light text-dark">None</span>
+                <% } else { %>
+                  <span class="badge bg-info text-dark text-uppercase"><%= u.plan %></span>
+                <% } %>
+              </td>
+              <td><%= u.contact || '—' %></td>
+              <td><%= u.address || '—' %></td>
+              <td class="text-center">
+                <div class="d-flex justify-content-center gap-2">
+                  <a href="/admin/users/<%= u.id %>/edit" class="btn btn-sm btn-outline-primary">Edit</a>
+                  <form action="/admin/users/<%= u.id %>/delete" method="POST" onsubmit="return confirm('Delete this user?');">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          <% }) %>
+        <% } else { %>
+          <tr>
+            <td colspan="8" class="text-center text-muted">No users found.</td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</div>
+<%- include('partials/footer') %>

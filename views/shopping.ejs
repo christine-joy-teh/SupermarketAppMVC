@@ -13,6 +13,7 @@
   },
   navLinksRight: [
     { href: '/cart', label: 'Cart', badgeValue: cartCount, badgeClass: 'bg-primary', classes: 'position-relative' },
+    { href: '/orders/history', label: 'My Orders' },
     { href: '/logout', label: 'Logout' }
   ]
 }) %>
@@ -52,7 +53,17 @@
                 <% } %>
               </div>
               <p class="mb-1">Available: <%= p.quantity %></p>
-              <p class="mb-2">Price: $<%= p.price.toFixed(2) %></p>
+              <% const discount = Number(p.discountPercent) || 0; const salePrice = discount > 0 ? (p.price * (1 - discount/100)) : p.price; %>
+              <p class="mb-2">
+                Price:
+                <% if (discount > 0) { %>
+                  <span class="text-muted text-decoration-line-through">$<%= p.price.toFixed(2) %></span>
+                  <span class="ms-1 fw-bold text-success">$<%= salePrice.toFixed(2) %></span>
+                  <span class="badge bg-danger ms-1">-<%= discount %>%</span>
+                <% } else { %>
+                  $<%= p.price.toFixed(2) %>
+                <% } %>
+              </p>
 
               <form action="/add-to-cart/<%= p.id %>" method="POST" class="mt-auto d-flex">
                 <select class="form-select me-2" name="quantity" style="width:80px;">

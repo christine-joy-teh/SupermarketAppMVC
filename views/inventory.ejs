@@ -2,7 +2,10 @@
 <%- include('partials/navbar', {
   navLinksLeft: [
     { href: '/inventory', label: 'Inventory', active: true },
-    { href: '/addProduct', label: 'Add Product' }
+    { href: '/addProduct', label: 'Add Product' },
+    { href: '/admin/orders', label: 'Orders' },
+    { href: '/admin/users', label: 'Users' },
+    { href: '/admin/promotion', label: 'Promotion' }
   ],
   navLinksRight: [
     { textOnly: true, text: `Welcome, ${user ? user.username : ''} (${user ? user.role : ''})`, className: 'me-3', textClass: 'text-white' },
@@ -58,7 +61,16 @@
                       <span class="inventory-quantity"><%= p.quantity %></span>
                     </td>
                     <td class="text-center">
-                      <span class="inventory-price">$<%= p.price.toFixed(2) %></span>
+                      <% const discount = Number(p.discountPercent) || 0; const sale = discount > 0 ? (p.price * (1 - discount/100)) : p.price; %>
+                      <span class="inventory-price">
+                        <% if (discount > 0) { %>
+                          <span class="text-muted text-decoration-line-through">$<%= p.price.toFixed(2) %></span>
+                          <span class="ms-1 fw-bold text-success">$<%= sale.toFixed(2) %></span>
+                          <span class="badge bg-danger ms-1">-<%= discount %>%</span>
+                        <% } else { %>
+                          $<%= p.price.toFixed(2) %>
+                        <% } %>
+                      </span>
                     </td>
                     <td class="text-center">
                       <div class="d-flex justify-content-center gap-2">
