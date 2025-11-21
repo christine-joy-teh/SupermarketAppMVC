@@ -79,6 +79,7 @@ app.get('/register', (req, res) => {
 // Orders API (admin list) and user history/detail
 app.get('/orders', checkAuthenticated, checkAdmin, (req, res) => orderController.list(req, res));
 app.get('/orders/history', checkAuthenticated, (req, res) => orderController.renderUserOrders(req, res));
+app.get('/orders/:id/invoice', checkAuthenticated, (req, res) => orderController.renderInvoice(req, res));
 app.get('/orders/:id', checkAuthenticated, (req, res) => orderController.detail(req, res));
 app.get('/admin/orders', checkAuthenticated, checkAdmin, (req, res) => orderController.renderAdminOrders(req, res));
 app.post('/admin/orders/:id/status', checkAuthenticated, checkAdmin, (req, res) => orderController.updateStatus(req, res));
@@ -86,10 +87,10 @@ app.post('/admin/orders/:id/delete', checkAuthenticated, checkAdmin, (req, res) 
 
 // POST route to handle registration
 app.post('/register', (req, res) => {
-    const { username, email, password, address, contact, role } = req.body;
+    const { username, email, password, address, contact } = req.body;
     const plan = req.body.plan || '';
     // basic validation
-    if (!username || !email || !password || !address || !contact || !role) {
+    if (!username || !email || !password || !address || !contact) {
         req.flash('error', 'All fields are required.');
         return res.redirect('/register');
     }
@@ -120,10 +121,10 @@ app.post('/register', (req, res) => {
             let sql, params;
             if (hasPlan) {
                 sql = 'INSERT INTO users (username, email, password, address, contact, role, plan) VALUES (?, ?, SHA1(?), ?, ?, ?, ?)';
-                params = [username, email, password, address, contact, role, plan];
+                params = [username, email, password, address, contact, 'user', plan];
             } else {
                 sql = 'INSERT INTO users (username, email, password, address, contact, role) VALUES (?, ?, SHA1(?), ?, ?, ?)';
-                params = [username, email, password, address, contact, role];
+                params = [username, email, password, address, contact, 'user'];
             }
 
             connection.query(sql, params, (insertErr, insertRes) => {
@@ -236,8 +237,8 @@ app.get('/cart', checkAuthenticated, (req, res) => {
     const cart = req.session.cart || [];
 
     // Use the shared promotion logic from OrderController
-    const promo = orderController.summarizeCart(cart);
-    res.render('cart', { cart, promo });
+    const summary = orderController.summarizeCart(cart, orderController.getMembershipBenefit(req.session.user));
+    res.render('cart', { cart, summary });
 });
 
 // Add to cart route
