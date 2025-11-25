@@ -9,6 +9,10 @@ const tableReady = ensureOrdersTable().then(cols => {
   console.error('Failed to ensure orders table:', err.message);
 });
 
+const cartTableReady = ensureCartTable().catch(err => {
+  console.error('Failed to ensure user_carts table:', err.message);
+});
+
 async function ensureOrdersTable() {
   await db.query(`
     CREATE TABLE IF NOT EXISTS orders (
@@ -76,6 +80,16 @@ async function ensureOrdersTable() {
     [dbName]
   );
   return colRows.map(r => r.COLUMN_NAME);
+}
+
+async function ensureCartTable() {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS user_carts (
+      userId INT NOT NULL PRIMARY KEY,
+      items JSON NOT NULL,
+      updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+  `);
 }
 
 function sanitizeCartItems(items = []) {
@@ -159,11 +173,36 @@ async function deleteOrder(id) {
   await db.query('DELETE FROM orders WHERE id = ?', [id]);
 }
 
+async function getCartByUserId(userId) {
+  await cartTableReady;
+  const [rows] = await db.query('SELECT items FROM user_carts WHERE userId = ?', [userId]);
+  if (!rows.length || !rows[0].items) return [];
+  try {
+    return JSON.parse(rows[0].items);
+  } catch (err) {
+    console.warn('Unable to parse stored cart for user', userId, err.message);
+    return [];
+  }
+}
+
+async function saveCart(userId, cartItems = []) {
+  await cartTableReady;
+  const payload = JSON.stringify(cartItems || []);
+  await db.query(
+    `INSERT INTO user_carts (userId, items)
+     VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE items = VALUES(items), updatedAt = CURRENT_TIMESTAMP`,
+    [userId, payload]
+  );
+}
+
 module.exports = {
   createOrder,
   getAllOrders,
   getOrderById,
   getOrdersByUser,
   updateOrderStatus,
-  deleteOrder
+  deleteOrder,
+  getCartByUserId,
+  saveCart
 };
