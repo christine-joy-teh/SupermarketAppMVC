@@ -233,12 +233,32 @@ app.get('/admin/promotion', checkAuthenticated, checkAdmin, (req, res) => orderC
 app.post('/admin/promotion', checkAuthenticated, checkAdmin, (req, res) => orderController.updatePromotion(req, res));
 
 // Cart route - Displays the cart
-app.get('/cart', checkAuthenticated, (req, res) => {
+app.get('/cart', checkAuthenticated, async (req, res) => {
     const cart = req.session.cart || [];
+    const membership = orderController.getMembershipBenefit(req.session.user);
 
-    // Use the shared promotion logic from OrderController
-    const summary = orderController.summarizeCart(cart, orderController.getMembershipBenefit(req.session.user));
-    res.render('cart', { cart, summary });
+    try {
+        const cartWithStock = [];
+        for (const item of cart) {
+            const product = await ProductModel.getById(item.productId);
+            const availableStock = product ? Number(product.quantity) || 0 : 0;
+            const currentQty = Number(item.quantity) || 0;
+
+            cartWithStock.push({
+                ...item,
+                availableStock,
+                maxAllowed: Math.max(currentQty, availableStock)
+            });
+        }
+
+        const summary = orderController.summarizeCart(cartWithStock, membership);
+        return res.render('cart', { cart: cartWithStock, summary });
+    } catch (err) {
+        console.error('Error loading cart:', err.message);
+        req.flash('error', 'Unable to load cart right now.');
+        const summary = orderController.summarizeCart(cart, membership);
+        return res.render('cart', { cart, summary });
+    }
 });
 
 // Add to cart route
@@ -282,7 +302,7 @@ app.post('/add-to-cart/:id', checkAuthenticated, async (req, res) => {
 });
 
 // Update item quantity in cart (set to new value; 0 removes)
-app.post('/cart/item/:id/update', checkAuthenticated, (req, res) => {
+app.post('/cart/item/:id/update', checkAuthenticated, async (req, res) => {
     const productId = Number(req.params.id);
     const qty = Number(req.body.quantity);
     if (!Number.isFinite(productId)) {
@@ -301,15 +321,33 @@ app.post('/cart/item/:id/update', checkAuthenticated, (req, res) => {
         return res.redirect('/cart');
     }
 
-    if (qty === 0) {
-        cart.splice(idx, 1);
-        req.flash('success', 'Item removed from cart.');
-    } else {
-        cart[idx].quantity = qty;
-        req.flash('success', 'Cart updated.');
+    try {
+        const product = await ProductModel.getById(productId);
+        if (!product) {
+            req.flash('error', 'Product not found.');
+            return res.redirect('/cart');
+        }
+
+        const availableStock = Number(product.quantity) || 0;
+        if (qty > availableStock) {
+            req.flash('error', `Only ${availableStock} left in stock for ${product.productName}.`);
+            return res.redirect('/cart');
+        }
+
+        if (qty === 0) {
+            cart.splice(idx, 1);
+            req.flash('success', 'Item removed from cart.');
+        } else {
+            cart[idx].quantity = qty;
+            req.flash('success', 'Cart updated.');
+        }
+        req.session.cart = cart;
+        return res.redirect('/cart');
+    } catch (err) {
+        console.error('Error updating cart item:', err.message);
+        req.flash('error', 'Unable to update cart right now.');
+        return res.redirect('/cart');
     }
-    req.session.cart = cart;
-    res.redirect('/cart');
 });
 
 // Delete item from cart
@@ -357,4 +395,4 @@ app.get('/logout', (req, res) => {
 
 // Start the server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
