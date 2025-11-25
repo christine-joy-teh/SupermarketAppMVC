@@ -63,6 +63,19 @@ async function checkout(req, res) {
     return res.redirect('/cart');
   }
 
+  // Basic payment validation
+  const { cardName = '', cardNumber = '', expiry = '', cvv = '' } = req.body || {};
+  const deliveryAddress = (req.body && req.body.deliveryAddress) ? String(req.body.deliveryAddress).trim() : '';
+  const pickupOutlet = (req.body && req.body.pickupOutlet) ? String(req.body.pickupOutlet).trim() : '';
+  const cleanNumber = (cardNumber || '').replace(/\s+/g, '');
+  const expiryOk = /^[0-1][0-9]\/[0-9]{2}$/.test(expiry || '');
+  const cardOk = /^\d{13,19}$/.test(cleanNumber);
+  const cvvOk = /^\d{3,4}$/.test(cvv || '');
+  if (!cardName.trim() || !cardOk || !expiryOk || !cvvOk) {
+    req.flash('error', 'Please enter valid card details (name, number, expiry MM/YY, CVV).');
+    return res.redirect('/cart');
+  }
+
   const membershipInfo = getMembershipBenefit(req.session.user);
   const summary = summarizeCart(cart, membershipInfo);
   try {
@@ -92,7 +105,9 @@ async function checkout(req, res) {
       savings: summary.totalSavings,
       status: 'processing',
       cartItems: cart,
-      deliveryMethod
+      deliveryMethod,
+      deliveryAddress: deliveryAddress || null,
+      pickupOutlet: deliveryMethod === 'pickup' ? (pickupOutlet || null) : null
     });
 
     // Reduce stock after successful order creation
