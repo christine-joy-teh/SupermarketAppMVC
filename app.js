@@ -7,9 +7,15 @@ const productController = require('./controllers/productController');
 const orderController = require('./controllers/orderController');
 const userAdminController = require('./controllers/userAdminController');
 const ProductModel = require('./models/productModel');
+const OrderModel = require('./models/orderModel');
 
 const { attachSessionLocals, checkAuthenticated, checkAdmin } = require('./middleware');
 const app = express();
+
+function resolveUserId(user) {
+    if (!user) return null;
+    return user.id || user.userId || user.user_id || user.userID || null;
+}
 
 // Set up multer for file uploads
 const storage = multer.diskStorage({
@@ -59,6 +65,17 @@ app.use(flash());
 
 // Expose common template variables + session helpers
 app.use(attachSessionLocals);
+
+async function persistCart(req) {
+    const userId = resolveUserId(req.session.user);
+    if (!userId) return;
+    const items = req.session && Array.isArray(req.session.cart) ? req.session.cart : [];
+    try {
+        await OrderModel.saveCart(userId, items);
+    } catch (err) {
+        console.error('Unable to save cart:', err.message);
+    }
+}
 
 // Routes
 
@@ -151,7 +168,7 @@ app.post('/login', (req, res) => {
     }
 
     const sql = 'SELECT * FROM users WHERE email = ? AND password = SHA1(?)';
-    connection.query(sql, [email, password], (err, results) => {
+    connection.query(sql, [email, password], async (err, results) => {
         if (err) {
             console.error('Database query error:', err.message);
             return res.status(500).send('Database error');
@@ -159,6 +176,15 @@ app.post('/login', (req, res) => {
 
         if (results.length > 0) {
             req.session.user = results[0]; 
+            try {
+                const savedCart = await OrderModel.getCartByUserId(resolveUserId(req.session.user));
+                if (Array.isArray(savedCart) && savedCart.length) {
+                    req.session.cart = savedCart;
+                }
+            } catch (loadErr) {
+                console.error('Unable to load saved cart:', loadErr.message);
+            }
+
             req.flash('success', 'Login successful!');
             if (req.session.user.role === 'user') {
                 res.redirect('/shopping');
@@ -234,10 +260,18 @@ app.post('/admin/promotion', checkAuthenticated, checkAdmin, (req, res) => order
 
 // Cart route - Displays the cart
 app.get('/cart', checkAuthenticated, async (req, res) => {
-    const cart = req.session.cart || [];
+    let cart = req.session.cart || [];
     const membership = orderController.getMembershipBenefit(req.session.user);
 
     try {
+        if (!cart.length) {
+            const savedCart = await OrderModel.getCartByUserId(resolveUserId(req.session.user));
+            if (Array.isArray(savedCart) && savedCart.length) {
+                cart = savedCart;
+                req.session.cart = savedCart;
+            }
+        }
+
         const cartWithStock = [];
         for (const item of cart) {
             const product = await ProductModel.getById(item.productId);
@@ -293,6 +327,8 @@ app.post('/add-to-cart/:id', checkAuthenticated, async (req, res) => {
             });
         }
 
+        await persistCart(req);
+
         // Redirect to the cart page
         res.redirect('/cart');
     } catch (error) {
@@ -342,6 +378,7 @@ app.post('/cart/item/:id/update', checkAuthenticated, async (req, res) => {
             req.flash('success', 'Cart updated.');
         }
         req.session.cart = cart;
+        await persistCart(req);
         return res.redirect('/cart');
     } catch (err) {
         console.error('Error updating cart item:', err.message);
@@ -351,7 +388,7 @@ app.post('/cart/item/:id/update', checkAuthenticated, async (req, res) => {
 });
 
 // Delete item from cart
-app.post('/cart/item/:id/delete', checkAuthenticated, (req, res) => {
+app.post('/cart/item/:id/delete', checkAuthenticated, async (req, res) => {
     const productId = Number(req.params.id);
     if (!Number.isFinite(productId)) {
         req.flash('error', 'Invalid product.');
@@ -365,6 +402,7 @@ app.post('/cart/item/:id/delete', checkAuthenticated, (req, res) => {
         req.flash('success', 'Item removed from cart.');
     }
     req.session.cart = nextCart;
+    await persistCart(req);
     res.redirect('/cart');
 });
 
@@ -373,7 +411,10 @@ app.post('/checkout', checkAuthenticated, (req, res) => orderController.checkout
 
 
 // Logout route - Destroy session and log the user out
-app.get('/logout', (req, res) => {
+app.get('/logout', async (req, res) => {
+    // Persist cart before destroying session so it can be restored on next login
+    await persistCart(req);
+
     // Set the flash message before destroying the session
     req.flash('success', 'You have been logged out.');
     
