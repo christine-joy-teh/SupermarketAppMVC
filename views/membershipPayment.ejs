@@ -1,0 +1,134 @@
+<%- include('partials/head', { pageTitle: 'Membership Payment' }) %>
+<%- include('partials/navbar', {
+  navLinksRight: user ? [
+    { href: '/cart', label: 'Cart', badgeValue: cartCount, badgeClass: 'bg-primary', classes: 'position-relative' },
+    { href: '/orders/history', label: 'My Orders' },
+    { href: '/shopping', label: 'Shop' },
+    { href: '/logout', label: 'Logout' }
+  ] : [
+    { href: '/register', label: 'Register' },
+    { href: '/login', label: 'Login' }
+  ]
+}) %>
+
+<div class="container py-4">
+  <div class="row justify-content-center">
+    <div class="col-lg-10">
+      <% if (typeof success !== 'undefined' && success.length) { %>
+        <div class="alert alert-success"><%= success[0] %></div>
+      <% } %>
+      <% if (typeof error !== 'undefined' && error.length) { %>
+        <div class="alert alert-danger"><%= error[0] %></div>
+      <% } %>
+
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-start gap-2 mb-3">
+        <div>
+          <h3 class="mb-1">Choose your membership</h3>
+          <% const currentPlan = (user && user.plan) ? String(user.plan).toLowerCase() : ''; %>
+          <p class="text-muted mb-0">
+            <% if (currentPlan) { %>
+              Current plan: <strong><%= currentPlan.toUpperCase() %></strong>
+            <% } else { %>
+              No plan selected yet. Pick one below.
+            <% } %>
+          </p>
+        </div>
+        <% if (user) { %>
+          <div class="badge bg-primary-subtle text-primary px-3 py-2 border">Signed in as <%= user.username || user.email || 'user' %></div>
+        <% } %>
+      </div>
+
+      <div class="plan-row">
+        <% const plans = {
+          basic: { name:'Basic', priceLabel:'Free', perks:['Standard checkout'], color:'outline-primary' },
+          silver: { name:'Silver', priceLabel:'$4.99 / mo', perks:['Free delivery over $50','5% off selected items'], color:'primary' },
+          gold: { name:'Gold', priceLabel:'$9.99 / mo', perks:['Free delivery','10% off storewide','Priority support'], color:'warning' }
+        }; %>
+
+        <% Object.keys(plans).forEach(function(key){ const p = plans[key]; const isSelected = planKey === key; const isCurrent = currentPlan === key; %>
+          <div class="plan-card <%= isSelected ? 'plan-selected' : '' %>" data-plan="<%= key %>">
+            <% if (key === 'silver') { %><div class="recommended">Recommended</div><% } %>
+            <% if (key === 'gold') { %><div class="plan-badge">Best value</div><% } %>
+            <div class="plan-name"><%= p.name %></div>
+            <div class="plan-price"><%= p.priceLabel %></div>
+            <div class="plan-features">
+              <% (p.perks || []).forEach(function(perk){ %>
+                <div><%= perk %></div>
+              <% }); %>
+            </div>
+            <% if (user) { %>
+              <a class="btn btn-<%= p.color %> btn-sm w-100 mt-auto <%= isCurrent ? 'disabled' : '' %>"
+                 href="/membership/payment?plan=<%= key %>&confirm=1">
+                <%= isCurrent ? 'Current plan' : ('Switch to ' + p.name) %>
+              </a>
+            <% } else { %>
+              <form action="/register" method="GET" class="mt-auto">
+                <input type="hidden" name="plan" value="<%= key %>">
+                <button type="submit" class="btn btn-<%= p.color %> btn-sm w-100">
+                  Choose <%= p.name %>
+                </button>
+              </form>
+            <% } %>
+          </div>
+        <% }); %>
+      </div>
+
+      <% const showConfirm = user && (confirm === '1' || confirm === 1 || planKey); %>
+      <% if (showConfirm) { const selectedPlan = plans[planKey] || plans.silver; %>
+        <div class="card shadow-sm mt-4">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+              <div>
+                <h5 class="mb-1">Payment</h5>
+                <div class="text-muted small mb-1">Selected plan: <strong><%= selectedPlan.name %></strong></div>
+                <div class="text-muted small">Benefits: <%= (selectedPlan.perks || []).join(', ') %></div>
+              </div>
+              <div class="text-end">
+                <div class="fs-5 fw-bold"><%= selectedPlan.priceLabel %></div>
+                <small class="text-muted">Billed monthly</small>
+              </div>
+            </div>
+            <form action="/membership/payment" method="POST" class="mt-3">
+              <input type="hidden" name="plan" value="<%= planKey %>">
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label">Name on card</label>
+                  <input type="text" name="cardName" class="form-control" placeholder="Jane Doe" required>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Card number</label>
+                  <input type="text" name="cardNumber" class="form-control" placeholder="4242 4242 4242 4242" inputmode="numeric" required>
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">Expiry (MM/YY)</label>
+                  <input type="text" name="expiry" class="form-control" placeholder="04/27" required>
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">CVV</label>
+                  <input type="text" name="cvv" class="form-control" placeholder="123" inputmode="numeric" required>
+                </div>
+              </div>
+              <div class="d-flex flex-column flex-sm-row gap-2 mt-3">
+                <a href="/shopping" class="btn btn-outline-secondary w-100">Back to shopping</a>
+                <button type="submit" class="btn btn-primary w-100">Proceed to payment</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      <% } %>
+
+      <div class="text-center mt-3">
+        <% if (!user) { %>
+          <small class="text-muted">Already have an account? <a href="/login">Sign in</a></small>
+        <% } else { %>
+          <div class="alert alert-warning d-inline-flex align-items-center py-2 px-3" role="alert">
+            <strong class="me-2">Need to leave?</strong>
+            <a href="/cart" class="alert-link">Back to cart</a>
+          </div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

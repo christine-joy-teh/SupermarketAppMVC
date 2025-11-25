@@ -87,6 +87,31 @@
                       <div class="invalid-feedback">You must agree before registering.</div>
                     </div>
 
+                    <div id="payment-section" class="card border-warning d-none mb-3">
+                      <div class="card-body">
+                        <h6 class="card-title mb-2 text-warning">Payment details (for Silver/Gold)</h6>
+                        <div class="row g-2">
+                          <div class="col-md-6">
+                            <label class="form-label">Name on card</label>
+                            <input type="text" name="cardName" class="form-control" placeholder="Jane Doe">
+                          </div>
+                          <div class="col-md-6">
+                            <label class="form-label">Card number</label>
+                            <input type="text" name="cardNumber" class="form-control" placeholder="4242 4242 4242 4242" inputmode="numeric">
+                          </div>
+                          <div class="col-md-3">
+                            <label class="form-label">Expiry (MM/YY)</label>
+                            <input type="text" name="expiry" class="form-control" placeholder="04/27">
+                          </div>
+                          <div class="col-md-3">
+                            <label class="form-label">CVV</label>
+                            <input type="text" name="cvv" class="form-control" placeholder="123" inputmode="numeric">
+                          </div>
+                        </div>
+                        <small class="text-muted d-block mt-2">Shown only when a paid plan is selected.</small>
+                      </div>
+                    </div>
+
                     <div class="d-grid">
                       <button type="submit" class="btn btn-primary btn-lg">Create account</button>
                     </div>
@@ -136,6 +161,7 @@
                   const cards = document.querySelectorAll('.plan-row .plan-card');
                   const selectedCardContainer = document.getElementById('selected-plan-card');
                   const help = document.getElementById('plan-help');
+                  const paymentSection = document.getElementById('payment-section');
 
                   const planInfo = {
                     basic: {name:'Basic', price:'Free', features:'Browse products · Standard checkout', badge:'No cost'},
@@ -155,6 +181,10 @@
                     if(plan) help.textContent = 'Selected: ' + plan.toUpperCase() + ' — this will be saved to your account.';
                     else help.textContent = 'Select a plan to apply perks to your account. You can skip and choose later.';
                     renderSelected(plan);
+                    if (paymentSection) {
+                      const paid = plan && plan !== 'basic';
+                      paymentSection.classList.toggle('d-none', !paid);
+                    }
                   }
 
                   cards.forEach(c=> c.addEventListener('click', ()=> selectPlan(c.dataset.plan)));
