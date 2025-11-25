@@ -40,7 +40,13 @@
                 <td><img src="/images/<%= cart[i].image %>" width="80" class="img-thumbnail"></td>
                 <td>
                   <form action="/cart/item/<%= cart[i].productId %>/update" method="POST" class="d-flex align-items-center gap-2">
-                    <input type="number" name="quantity" min="0" step="1" value="<%= cart[i].quantity %>" class="form-control form-control-sm" style="width: 80px;">
+                    <% const available = Number(cart[i].availableStock); %>
+                    <% const qtyVal = Number(cart[i].quantity) || 0; %>
+                    <% const maxQty = Math.max(qtyVal, Number.isFinite(available) ? available : 0); %>
+                    <input type="number" name="quantity" min="0" step="1" value="<%= qtyVal %>" <% if (maxQty > 0) { %>max="<%= maxQty %>"<% } %> class="form-control form-control-sm" style="width: 80px;">
+                    <% if (Number.isFinite(available)) { %>
+                      <small class="text-muted">Available: <%= available %></small>
+                    <% } %>
                     <button type="submit" class="btn btn-sm btn-outline-primary">Update</button>
                   </form>
                 </td>
