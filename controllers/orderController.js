@@ -101,6 +101,12 @@ async function checkout(req, res) {
     }
 
     req.session.cart = [];
+    try {
+      const userId = resolveUserId(req.session.user);
+      if (userId) await OrderModel.saveCart(userId, []);
+    } catch (persistErr) {
+      console.error('Unable to clear saved cart after checkout:', persistErr.message);
+    }
     let savingsMsg = '';
     if (summary.totalSavings > 0) {
       const promoPart = summary.promoSavings > 0 ? `promo $${summary.promoSavings.toFixed(2)}` : '';
