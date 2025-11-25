@@ -53,6 +53,7 @@ async function ensureOrdersTable() {
   await ensureColumn('status', "status VARCHAR(50) DEFAULT 'processing'");
   await ensureColumn('itemsJson', 'itemsJson LONGTEXT');
   await ensureColumn('createdAt', 'createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
+  await ensureColumn('deliveryMethod', "deliveryMethod VARCHAR(50) DEFAULT 'delivery'");
 
   // Loosen existing columns that might be NOT NULL without defaults
   try {
@@ -103,13 +104,13 @@ function mapOrderRow(row) {
   return { ...row, userId, items };
 }
 
-async function createOrder({ userId, subtotal, total, savings, status = 'processing', cartItems = [] }) {
+async function createOrder({ userId, subtotal, total, savings, status = 'processing', cartItems = [], deliveryMethod = 'delivery' }) {
   await tableReady;
   const normalizedItems = sanitizeCartItems(cartItems);
   // Always write to both userId and user_id (both columns are created in ensureOrdersTable)
   const sql = `
-    INSERT INTO orders (userId, user_id, subtotal, total, savings, status, itemsJson)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO orders (userId, user_id, subtotal, total, savings, status, itemsJson, deliveryMethod)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `;
   const params = [
     userId || null,
@@ -118,7 +119,8 @@ async function createOrder({ userId, subtotal, total, savings, status = 'process
     total || 0,
     savings || 0,
     status,
-    JSON.stringify(normalizedItems)
+    JSON.stringify(normalizedItems),
+    deliveryMethod || 'delivery'
   ];
 
   const [result] = await db.query(sql, params);

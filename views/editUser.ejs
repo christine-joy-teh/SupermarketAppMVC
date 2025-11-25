@@ -40,8 +40,13 @@
       </div>
       <div class="mb-3">
         <label class="form-label" for="plan">Plan</label>
-        <input id="plan" name="plan" type="text" class="form-control" value="<%= typeof targetUser.plan !== 'undefined' ? (targetUser.plan || '') : '' %>" placeholder="Optional">
-        <small class="text-muted">Leave blank if not applicable.</small>
+        <select id="plan" name="plan" class="form-select">
+          <option value="">None</option>
+          <option value="basic" <%= targetUser.plan === 'basic' ? 'selected' : '' %>>Basic</option>
+          <option value="silver" <%= targetUser.plan === 'silver' ? 'selected' : '' %>>Silver</option>
+          <option value="gold" <%= targetUser.plan === 'gold' ? 'selected' : '' %>>Gold</option>
+        </select>
+        <small class="text-muted">Choose a membership for this user.</small>
       </div>
       <div class="mb-3">
         <label class="form-label" for="contact">Contact</label>

@@ -50,7 +50,15 @@
               <td><%= u.username %></td>
               <td><%= u.email %></td>
               <td><span class="badge bg-secondary text-uppercase"><%= u.role %></span></td>
-              <td><%= typeof u.plan !== 'undefined' ? (u.plan || '—') : 'n/a' %></td>
+              <td>
+                <% if (typeof u.plan === 'undefined') { %>
+                  <span class="text-muted">n/a</span>
+                <% } else if (!u.plan) { %>
+                  <span class="badge bg-light text-dark">None</span>
+                <% } else { %>
+                  <span class="badge bg-info text-dark text-uppercase"><%= u.plan %></span>
+                <% } %>
+              </td>
               <td><%= u.contact || '—' %></td>
               <td><%= u.address || '—' %></td>
               <td class="text-center">

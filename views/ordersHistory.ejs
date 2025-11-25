@@ -47,6 +47,10 @@
           </h2>
           <div id="collapse-<%= idx %>" class="accordion-collapse collapse <%= idx === 0 ? 'show' : '' %>" data-bs-parent="#ordersAccordion">
             <div class="accordion-body">
+              <div class="d-flex justify-content-end mb-3">
+                <a class="btn btn-sm btn-outline-secondary" href="/orders/<%= order.id %>/invoice">View invoice</a>
+              </div>
+              <p class="mb-2"><strong>Delivery:</strong> <%= order.deliveryMethod || 'delivery' %></p>
               <p class="mb-2"><strong>Subtotal:</strong> $<%= Number(order.subtotal || 0).toFixed(2) %></p>
               <p class="mb-2"><strong>Savings:</strong> $<%= Number(order.savings || 0).toFixed(2) %></p>
               <p class="mb-3"><strong>Total charged:</strong> $<%= Number(order.total || 0).toFixed(2) %></p>

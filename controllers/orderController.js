@@ -1,5 +1,6 @@
 const OrderModel = require('../models/orderModel');
 const ProductModel = require('../models/productModel');
+const UserModel = require('../models/userModel');
 
 // Promotion configuration (editable by admin at runtime)
 let promotionConfig = {
@@ -7,12 +8,19 @@ let promotionConfig = {
   percent: 10
 };
 
+function getMembershipBenefit(user) {
+  const planRaw = user && user.plan ? String(user.plan).toLowerCase() : '';
+  if (planRaw === 'gold') return { membershipPercent: 10, membershipPlan: 'gold' };
+  if (planRaw === 'silver') return { membershipPercent: 5, membershipPlan: 'silver' };
+  return { membershipPercent: 0, membershipPlan: planRaw || '' };
+}
+
 function resolveUserId(user) {
   if (!user) return null;
   return user.id || user.userId || user.user_id || user.userID || null;
 }
 
-function summarizeCart(cart = []) {
+function summarizeCart(cart = [], { membershipPercent = 0, membershipPlan = '' } = {}) {
   let totalBefore = 0;
   let matchTotal = 0;
 
@@ -28,14 +36,23 @@ function summarizeCart(cart = []) {
   const percent = Number(promotionConfig.percent) || 0;
   const promoSavings = percent > 0 ? (matchTotal * (percent / 100)) : 0;
 
-  const totalAfter = Math.max(totalBefore - promoSavings, 0);
-  const totalSavings = promoSavings || 0;
+  const membershipPct = Number(membershipPercent) > 0 ? Number(membershipPercent) : 0;
+  const membershipSavings = membershipPct > 0 ? (Math.max(totalBefore - promoSavings, 0) * (membershipPct / 100)) : 0;
+
+  const totalAfter = Math.max(totalBefore - promoSavings - membershipSavings, 0);
+  const totalSavings = (promoSavings || 0) + (membershipSavings || 0);
   return {
     totalBefore,
     totalAfter,
     totalSavings,
     matchTotal,
-    promo: { ...promotionConfig }
+    promo: { ...promotionConfig },
+    promoSavings,
+    membership: {
+      plan: membershipPlan,
+      percent: membershipPct,
+      savings: membershipSavings
+    }
   };
 }
 
@@ -46,7 +63,8 @@ async function checkout(req, res) {
     return res.redirect('/cart');
   }
 
-  const summary = summarizeCart(cart);
+  const membershipInfo = getMembershipBenefit(req.session.user);
+  const summary = summarizeCart(cart, membershipInfo);
   try {
     // Validate stock before placing order
     for (const item of cart) {
@@ -66,13 +84,15 @@ async function checkout(req, res) {
       }
     }
 
+    const deliveryMethod = req.body && req.body.deliveryMethod ? String(req.body.deliveryMethod) : 'delivery';
     const orderRecord = await OrderModel.createOrder({
       userId: resolveUserId(req.session.user),
       subtotal: summary.totalBefore,
       total: summary.totalAfter,
       savings: summary.totalSavings,
       status: 'processing',
-      cartItems: cart
+      cartItems: cart,
+      deliveryMethod
     });
 
     // Reduce stock after successful order creation
@@ -81,9 +101,17 @@ async function checkout(req, res) {
     }
 
     req.session.cart = [];
-    const savingsMsg = summary.totalSavings > 0 ? ` (you saved $${summary.totalSavings.toFixed(2)} from promotions)` : '';
+    let savingsMsg = '';
+    if (summary.totalSavings > 0) {
+      const promoPart = summary.promoSavings > 0 ? `promo $${summary.promoSavings.toFixed(2)}` : '';
+      const memberPart = summary.membership && summary.membership.savings > 0
+        ? `membership $${summary.membership.savings.toFixed(2)}`
+        : '';
+      const parts = [promoPart, memberPart].filter(Boolean).join(' + ');
+      savingsMsg = ` (you saved $${summary.totalSavings.toFixed(2)}${parts ? `: ${parts}` : ''})`;
+    }
     req.flash('success', `Order #${orderRecord.id} placed! Total: $${summary.totalAfter.toFixed(2)}${savingsMsg}`);
-    res.redirect('/shopping');
+    res.redirect(`/orders/${orderRecord.id}/invoice`);
   } catch (err) {
     console.error('Error creating order:', err.message);
     req.flash('error', 'Unable to place order right now. Please try again later.');
@@ -140,6 +168,75 @@ async function renderAdminOrders(req, res) {
     console.error('Error fetching orders:', err.message);
     req.flash('error', 'Unable to load orders right now.');
     res.redirect('/inventory');
+  }
+}
+
+async function renderInvoice(req, res) {
+  if (!req.session.user) {
+    req.flash('error', 'Please log in to view invoices.');
+    return res.redirect('/login');
+  }
+
+  const orderId = req.params.id;
+  try {
+    const order = await OrderModel.getOrderById(orderId);
+    if (!order) {
+      req.flash('error', 'Order not found.');
+      return res.redirect('/orders/history');
+    }
+
+    const sessionUser = req.session.user;
+    const sessionUserId = resolveUserId(sessionUser);
+    const isAdmin = sessionUser && sessionUser.role === 'admin';
+    const belongsToUser = order.userId && Number(order.userId) === Number(sessionUserId);
+
+    if (!isAdmin && !belongsToUser) {
+      req.flash('error', 'You are not authorized to view this invoice.');
+      return res.redirect('/orders/history');
+    }
+
+    let customer = {
+      name: sessionUser.username || sessionUser.name || '',
+      email: sessionUser.email || '',
+      address: sessionUser.address || '',
+      contact: sessionUser.contact || ''
+    };
+
+    // For admins viewing other users' orders, fetch customer details to display on the invoice
+    if (isAdmin && !belongsToUser && order.userId) {
+      try {
+        const fetchedUser = await UserModel.getById(order.userId);
+        if (fetchedUser) {
+          customer = {
+            name: fetchedUser.username || fetchedUser.name || '',
+            email: fetchedUser.email || '',
+            address: fetchedUser.address || '',
+            contact: fetchedUser.contact || ''
+          };
+        }
+      } catch (err) {
+        console.warn('Unable to fetch user for invoice:', err.message);
+      }
+    }
+
+    const items = Array.isArray(order.items) ? order.items : [];
+    const totals = {
+      subtotal: Number(order.subtotal || 0),
+      savings: Number(order.savings || 0),
+      total: Number(order.total || 0)
+    };
+
+    res.render('invoice', {
+      order,
+      customer,
+      items,
+      totals,
+      user: req.session.user
+    });
+  } catch (err) {
+    console.error('Error rendering invoice:', err.message);
+    req.flash('error', 'Unable to load invoice right now.');
+    res.redirect('/orders/history');
   }
 }
 
@@ -203,9 +300,11 @@ module.exports = {
   summarizeCart,
   renderUserOrders,
   renderAdminOrders,
+  renderInvoice,
   updateStatus,
   remove,
   renderPromotion,
   updatePromotion,
-  get promotionConfig() { return promotionConfig; }
+  get promotionConfig() { return promotionConfig; },
+  getMembershipBenefit
 };

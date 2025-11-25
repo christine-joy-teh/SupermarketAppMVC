@@ -36,6 +36,7 @@
           <th>Total</th>
           <th>Savings</th>
           <th>Status</th>
+          <th>Delivery</th>
           <th>Created</th>
           <th class="text-center">Update</th>
           <th class="text-center">Delete</th>
@@ -45,11 +46,20 @@
         <% if (orders && orders.length) { %>
           <% orders.forEach(o => { %>
             <tr>
-              <td>#<%= o.id %></td>
-              <td><%= o.userId || o.user_id || '—' %></td>
+              <td>
+                <a href="#" class="badge bg-info text-dark text-decoration-none order-items-link"
+                   data-bs-toggle="modal"
+                   data-bs-target="#itemsModal"
+                   data-order-id="<%= o.id %>"
+                   data-items="<%- encodeURIComponent(JSON.stringify(o.items || [])) %>">
+                  #<%= o.id %>
+                </a>
+              </td>
+              <td><%= o.userId || o.user_id || 'N/A' %></td>
               <td>$<%= Number(o.total || 0).toFixed(2) %></td>
               <td>$<%= Number(o.savings || 0).toFixed(2) %></td>
               <td><span class="badge bg-secondary text-uppercase"><%= o.status %></span></td>
+              <td><span class="badge bg-light text-dark text-uppercase"><%= o.deliveryMethod || 'delivery' %></span></td>
               <td><%= o.createdAt ? new Date(o.createdAt).toLocaleString() : '' %></td>
               <td class="text-center">
                 <form action="/admin/orders/<%= o.id %>/status" method="POST" class="d-flex gap-2 justify-content-center">
@@ -77,4 +87,82 @@
     </table>
   </div>
 </div>
+
+<!-- Items Modal -->
+<div class="modal fade" id="itemsModal" tabindex="-1" aria-labelledby="itemsModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="itemsModalLabel">Order items</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0" id="itemsTable">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th class="text-center">Qty</th>
+                <th class="text-center">Price</th>
+                <th class="text-end">Line total</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="text-muted">
+                <td colspan="4" class="text-center">No items</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Populate the modal with order items when an ID badge is clicked
+  (function() {
+    const modalEl = document.getElementById('itemsModal');
+    if (!modalEl) return;
+    const tableBody = modalEl.querySelector('#itemsTable tbody');
+    const titleEl = document.getElementById('itemsModalLabel');
+
+    document.querySelectorAll('.order-items-link').forEach(link => {
+      link.addEventListener('click', () => {
+        const orderId = link.getAttribute('data-order-id');
+        titleEl.textContent = `Order #${orderId} items`;
+
+        let items = [];
+        try {
+          const decoded = decodeURIComponent(link.getAttribute('data-items') || '[]');
+          items = JSON.parse(decoded);
+        } catch (err) {
+          items = [];
+        }
+
+        tableBody.innerHTML = '';
+        if (!Array.isArray(items) || !items.length) {
+          tableBody.innerHTML = '<tr class="text-muted"><td colspan="4" class="text-center">No items recorded</td></tr>';
+          return;
+        }
+
+        items.forEach(it => {
+          const qty = Number(it.quantity || 0);
+          const price = Number(it.price || 0);
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${(it.productName || 'Item')}</td>
+            <td class="text-center">${qty}</td>
+            <td class="text-center">$${price.toFixed(2)}</td>
+            <td class="text-end fw-semibold">$${(qty * price).toFixed(2)}</td>
+          `;
+          tableBody.appendChild(row);
+        });
+      });
+    });
+  })();
+</script>
 <%- include('partials/footer') %>

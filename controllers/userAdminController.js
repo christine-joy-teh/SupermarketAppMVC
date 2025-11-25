@@ -8,6 +8,12 @@ function isValidRole(role) {
   return role === 'admin' || role === 'user';
 }
 
+function isValidPlan(plan) {
+  // Allow empty/undefined (means no plan). Otherwise restrict to known plans.
+  const allowed = ['', null, undefined, 'basic', 'silver', 'gold'];
+  return allowed.includes(plan);
+}
+
 async function list(req, res) {
   try {
     const users = await UserModel.list();
@@ -38,8 +44,8 @@ async function update(req, res) {
   const { username, email, address, contact, role, plan } = req.body;
   const userId = req.params.id;
 
-  if (!username || !email || !role || !isValidEmail(email) || !isValidRole(role)) {
-    req.flash('error', 'Please provide a username, valid email, and role (admin/user).');
+  if (!username || !email || !role || !isValidEmail(email) || !isValidRole(role) || !isValidPlan(plan || '')) {
+    req.flash('error', 'Please provide a username, valid email, role (admin/user), and a valid plan (Basic/Silver/Gold).');
     return res.redirect(`/admin/users/${userId}/edit`);
   }
 
@@ -50,7 +56,7 @@ async function update(req, res) {
       address: address || '',
       contact: contact || '',
       role,
-      plan
+      plan: plan || null
     });
 
     if (result && result.affectedRows === 0) {
