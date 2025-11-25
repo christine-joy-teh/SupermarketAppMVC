@@ -8,6 +8,7 @@ const orderController = require('./controllers/orderController');
 const userAdminController = require('./controllers/userAdminController');
 const ProductModel = require('./models/productModel');
 const OrderModel = require('./models/orderModel');
+const UserModel = require('./models/userModel');
 
 const { attachSessionLocals, checkAuthenticated, checkAdmin } = require('./middleware');
 const app = express();
@@ -91,6 +92,56 @@ app.get('/login', (req, res) => {
 app.get('/register', (req, res) => {
     const plan = req.query.plan || '';
     res.render('register', { messages: req.flash('error'), formData: {}, plan });
+});
+
+// Membership payment landing (select plan and proceed)
+app.get('/membership/payment', (req, res) => {
+    const planKey = (req.query.plan || 'silver').toLowerCase();
+    const confirm = req.query.confirm || '';
+    const plans = {
+        basic: { name: 'Basic', amount: 0, priceLabel: 'Free', perks: ['Standard checkout'] },
+        silver: { name: 'Silver', amount: 4.99, priceLabel: '$4.99 / mo', perks: ['Free delivery over $50', '5% off selected items'] },
+        gold: { name: 'Gold', amount: 9.99, priceLabel: '$9.99 / mo', perks: ['Free delivery', '10% off storewide', 'Priority support'] }
+    };
+    const selected = plans[planKey] || plans.silver;
+    res.render('membershipPayment', { planKey: planKey, plan: selected, user: req.session.user, confirm });
+});
+
+// Apply membership for a logged-in user
+app.post('/membership/payment', checkAuthenticated, async (req, res) => {
+    const plan = (req.body.plan || '').toLowerCase();
+    const allowed = ['basic', 'silver', 'gold'];
+    if (!allowed.includes(plan)) {
+        req.flash('error', 'Invalid plan selected.');
+        return res.redirect('/membership/payment');
+    }
+    const userId = resolveUserId(req.session.user);
+    if (!userId) {
+        req.flash('error', 'User not found.');
+        return res.redirect('/membership/payment');
+    }
+
+    const { cardName = '', cardNumber = '', expiry = '', cvv = '' } = req.body;
+    const cleanNumber = cardNumber.replace(/\s+/g, '');
+    const expiryOk = /^[0-1][0-9]\/[0-9]{2}$/.test(expiry);
+    const cardOk = /^\d{13,19}$/.test(cleanNumber);
+    const cvvOk = /^\d{3,4}$/.test(cvv);
+    if (!cardName.trim() || !cardOk || !expiryOk || !cvvOk) {
+        req.flash('error', 'Please enter valid card details (name, number, expiry MM/YY, CVV).');
+        return res.redirect(`/membership/payment?plan=${plan}&confirm=1`);
+    }
+
+    try {
+        await UserModel.update(userId, { plan });
+        // Update session copy for immediate effect
+        req.session.user.plan = plan;
+        req.flash('success', `Your membership plan has been updated to ${plan.toUpperCase()}.`);
+        return res.redirect(303, `/membership/payment?plan=${plan}&confirm=1`);
+    } catch (err) {
+        console.error('Unable to update membership:', err.message);
+        req.flash('error', 'Could not update membership. Please try again.');
+        return res.redirect('/membership/payment');
+    }
 });
 
 // Orders API (admin list) and user history/detail
