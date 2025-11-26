@@ -1,22 +1,13 @@
 const express = require('express');
-const mysql = require('mysql2');
 const multer = require('multer');
 const session = require('express-session');
 const flash = require('connect-flash');
 const productController = require('./controllers/productController');
 const orderController = require('./controllers/orderController');
-const userAdminController = require('./controllers/userAdminController');
-const ProductModel = require('./models/productModel');
-const OrderModel = require('./models/orderModel');
-const UserModel = require('./models/userModel');
+const userController = require('./controllers/userController');
 
 const { attachSessionLocals, checkAuthenticated, checkAdmin } = require('./middleware');
 const app = express();
-
-function resolveUserId(user) {
-    if (!user) return null;
-    return user.id || user.userId || user.user_id || user.userID || null;
-}
 
 // Set up multer for file uploads
 const storage = multer.diskStorage({
@@ -29,23 +20,6 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage: storage });
-
-// Database connection details
-const connection = mysql.createConnection({
-    host: 'localhost',
-    user: 'root',
-    password: 'Republic_C207',
-    database: 'c372_supermarketdb'
-});
-
-// Connecting to database
-connection.connect((err) => {
-    if (err) {
-        console.error('Error connecting to MySQL:', err);
-        return;
-    }
-    console.log('Connected to MySQL database');
-});
 
 // Set up view engine
 app.set('view engine', 'ejs');
@@ -67,82 +41,22 @@ app.use(flash());
 // Expose common template variables + session helpers
 app.use(attachSessionLocals);
 
-async function persistCart(req) {
-    const userId = resolveUserId(req.session.user);
-    if (!userId) return;
-    const items = req.session && Array.isArray(req.session.cart) ? req.session.cart : [];
-    try {
-        await OrderModel.saveCart(userId, items);
-    } catch (err) {
-        console.error('Unable to save cart:', err.message);
-    }
-}
-
 // Routes
 
 // Home route - Displays products with optional search & sort
 app.get('/', (req, res) => productController.renderHome(req, res));
 
 // GET route for login page
-app.get('/login', (req, res) => {
-    res.render('login', { messages: req.flash('success'), errors: req.flash('error') });
-});
+app.get('/login', (req, res) => userController.renderLogin(req, res));
 
 // GET route for registration page
-app.get('/register', (req, res) => {
-    const plan = req.query.plan || '';
-    res.render('register', { messages: req.flash('error'), formData: {}, plan });
-});
+app.get('/register', (req, res) => userController.renderRegister(req, res));
 
 // Membership payment landing (select plan and proceed)
-app.get('/membership/payment', (req, res) => {
-    const planKey = (req.query.plan || 'silver').toLowerCase();
-    const confirm = req.query.confirm || '';
-    const plans = {
-        basic: { name: 'Basic', amount: 0, priceLabel: 'Free', perks: ['Standard checkout'] },
-        silver: { name: 'Silver', amount: 4.99, priceLabel: '$4.99 / mo', perks: ['Free delivery over $50', '5% off selected items'] },
-        gold: { name: 'Gold', amount: 9.99, priceLabel: '$9.99 / mo', perks: ['Free delivery', '10% off storewide', 'Priority support'] }
-    };
-    const selected = plans[planKey] || plans.silver;
-    res.render('membershipPayment', { planKey: planKey, plan: selected, user: req.session.user, confirm });
-});
+app.get('/membership/payment', (req, res) => userController.renderMembershipPayment(req, res));
 
 // Apply membership for a logged-in user
-app.post('/membership/payment', checkAuthenticated, async (req, res) => {
-    const plan = (req.body.plan || '').toLowerCase();
-    const allowed = ['basic', 'silver', 'gold'];
-    if (!allowed.includes(plan)) {
-        req.flash('error', 'Invalid plan selected.');
-        return res.redirect('/membership/payment');
-    }
-    const userId = resolveUserId(req.session.user);
-    if (!userId) {
-        req.flash('error', 'User not found.');
-        return res.redirect('/membership/payment');
-    }
-
-    const { cardName = '', cardNumber = '', expiry = '', cvv = '' } = req.body;
-    const cleanNumber = cardNumber.replace(/\s+/g, '');
-    const expiryOk = /^[0-1][0-9]\/[0-9]{2}$/.test(expiry);
-    const cardOk = /^\d{13,19}$/.test(cleanNumber);
-    const cvvOk = /^\d{3,4}$/.test(cvv);
-    if (!cardName.trim() || !cardOk || !expiryOk || !cvvOk) {
-        req.flash('error', 'Please enter valid card details (name, number, expiry MM/YY, CVV).');
-        return res.redirect(`/membership/payment?plan=${plan}&confirm=1`);
-    }
-
-    try {
-        await UserModel.update(userId, { plan });
-        // Update session copy for immediate effect
-        req.session.user.plan = plan;
-        req.flash('success', `Your membership plan has been updated to ${plan.toUpperCase()}.`);
-        return res.redirect(303, `/membership/payment?plan=${plan}&confirm=1`);
-    } catch (err) {
-        console.error('Unable to update membership:', err.message);
-        req.flash('error', 'Could not update membership. Please try again.');
-        return res.redirect('/membership/payment');
-    }
-});
+app.post('/membership/payment', checkAuthenticated, (req, res) => userController.processMembershipPayment(req, res));
 
 // Orders API (admin list) and user history/detail
 app.get('/orders', checkAuthenticated, checkAdmin, (req, res) => orderController.list(req, res));
@@ -154,100 +68,10 @@ app.post('/admin/orders/:id/status', checkAuthenticated, checkAdmin, (req, res) 
 app.post('/admin/orders/:id/delete', checkAuthenticated, checkAdmin, (req, res) => orderController.remove(req, res));
 
 // POST route to handle registration
-app.post('/register', (req, res) => {
-    const { username, email, password, address, contact } = req.body;
-    const plan = req.body.plan || '';
-    // basic validation
-    if (!username || !email || !password || !address || !contact) {
-        req.flash('error', 'All fields are required.');
-        return res.redirect('/register');
-    }
-
-    // check if email already exists
-    connection.query('SELECT id FROM users WHERE email = ?', [email], (err, results) => {
-        if (err) {
-            console.error('Database error during registration:', err.message);
-            req.flash('error', 'Database error. Please try again later.');
-            return res.redirect('/register');
-        }
-
-        if (results.length > 0) {
-            req.flash('error', 'An account with that email already exists.');
-            return res.redirect('/register');
-        }
-
-        // Decide whether the users table has a 'plan' column. If so, include it in the INSERT.
-        const colCheckSql = "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND COLUMN_NAME = 'plan'";
-        connection.query(colCheckSql, [connection.config.database], (colErr, colRes) => {
-            if (colErr) {
-                console.error('Error checking users table columns:', colErr.message);
-                req.flash('error', 'Unable to create account.');
-                return res.redirect('/register');
-            }
-
-            const hasPlan = colRes.length > 0;
-            let sql, params;
-            if (hasPlan) {
-                sql = 'INSERT INTO users (username, email, password, address, contact, role, plan) VALUES (?, ?, SHA1(?), ?, ?, ?, ?)';
-                params = [username, email, password, address, contact, 'user', plan];
-            } else {
-                sql = 'INSERT INTO users (username, email, password, address, contact, role) VALUES (?, ?, SHA1(?), ?, ?, ?)';
-                params = [username, email, password, address, contact, 'user'];
-            }
-
-            connection.query(sql, params, (insertErr, insertRes) => {
-                if (insertErr) {
-                    console.error('Error inserting user:', insertErr.message);
-                    req.flash('error', 'Unable to create account.');
-                    return res.redirect('/register');
-                }
-
-                req.flash('success', 'Registration successful. Please log in.');
-                res.redirect('/login');
-            });
-        });
-    });
-});
+app.post('/register', (req, res) => userController.register(req, res));
 
 // POST route for login form submission
-app.post('/login', (req, res) => {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-        req.flash('error', 'All fields are required.');
-        return res.redirect('/login');
-    }
-
-    const sql = 'SELECT * FROM users WHERE email = ? AND password = SHA1(?)';
-    connection.query(sql, [email, password], async (err, results) => {
-        if (err) {
-            console.error('Database query error:', err.message);
-            return res.status(500).send('Database error');
-        }
-
-        if (results.length > 0) {
-            req.session.user = results[0]; 
-            try {
-                const savedCart = await OrderModel.getCartByUserId(resolveUserId(req.session.user));
-                if (Array.isArray(savedCart) && savedCart.length) {
-                    req.session.cart = savedCart;
-                }
-            } catch (loadErr) {
-                console.error('Unable to load saved cart:', loadErr.message);
-            }
-
-            req.flash('success', 'Login successful!');
-            if (req.session.user.role === 'user') {
-                res.redirect('/shopping');
-            } else {
-                res.redirect('/inventory');
-            }
-        } else {
-            req.flash('error', 'Invalid email or password.');
-            res.redirect('/login');
-        }
-    });
-});
+app.post('/login', (req, res) => userController.login(req, res));
 
 // Product details route
 app.get('/product/:id', (req, res) => {
@@ -289,20 +113,21 @@ app.get('/shopping', checkAuthenticated, (req, res) => {
 });
 
 // Admin: manage users
+app.get('/admin', checkAuthenticated, checkAdmin, (req, res) => res.redirect('/admin/orders'));
 app.get('/admin/users', checkAuthenticated, checkAdmin, (req, res) => {
-    userAdminController.list(req, res);
+    userController.listUsers(req, res);
 });
 
 app.get('/admin/users/:id/edit', checkAuthenticated, checkAdmin, (req, res) => {
-    userAdminController.renderEdit(req, res);
+    userController.renderEditUser(req, res);
 });
 
 app.post('/admin/users/:id', checkAuthenticated, checkAdmin, (req, res) => {
-    userAdminController.update(req, res);
+    userController.updateUser(req, res);
 });
 
-app.post('/admin/users/:id/delete', checkAuthenticated, checkAdmin, (req, res) => {
-    userAdminController.remove(req, res);
+app.post('/admin/users/:id/disable', checkAuthenticated, checkAdmin, (req, res) => {
+    userController.toggleDisable(req, res);
 });
 
 // Admin promotion management
@@ -310,177 +135,23 @@ app.get('/admin/promotion', checkAuthenticated, checkAdmin, (req, res) => orderC
 app.post('/admin/promotion', checkAuthenticated, checkAdmin, (req, res) => orderController.updatePromotion(req, res));
 
 // Cart route - Displays the cart
-app.get('/cart', checkAuthenticated, async (req, res) => {
-    let cart = req.session.cart || [];
-    const membership = orderController.getMembershipBenefit(req.session.user);
-
-    try {
-        if (!cart.length) {
-            const savedCart = await OrderModel.getCartByUserId(resolveUserId(req.session.user));
-            if (Array.isArray(savedCart) && savedCart.length) {
-                cart = savedCart;
-                req.session.cart = savedCart;
-            }
-        }
-
-        const cartWithStock = [];
-        for (const item of cart) {
-            const product = await ProductModel.getById(item.productId);
-            const availableStock = product ? Number(product.quantity) || 0 : 0;
-            const currentQty = Number(item.quantity) || 0;
-
-            cartWithStock.push({
-                ...item,
-                availableStock,
-                maxAllowed: Math.max(currentQty, availableStock)
-            });
-        }
-
-        const summary = orderController.summarizeCart(cartWithStock, membership);
-        return res.render('cart', { cart: cartWithStock, summary });
-    } catch (err) {
-        console.error('Error loading cart:', err.message);
-        req.flash('error', 'Unable to load cart right now.');
-        const summary = orderController.summarizeCart(cart, membership);
-        return res.render('cart', { cart, summary });
-    }
-});
+app.get('/cart', checkAuthenticated, (req, res) => orderController.renderCart(req, res));
 
 // Add to cart route
-app.post('/add-to-cart/:id', checkAuthenticated, async (req, res) => {
-    try {
-        const productId = parseInt(req.params.id);  // Get the product ID from the URL
-        const quantity = parseInt(req.body.quantity) || 1;  // Default quantity is 1 if not provided
-
-        const product = await ProductModel.getById(productId);
-        if (!product) return res.status(404).send('Product not found');
-
-        // Initialize the cart in session if it doesn't exist
-        if (!req.session.cart) {
-            req.session.cart = [];
-        }
-
-        const discount = Number(product.discountPercent) || 0;
-        const finalPrice = discount > 0 ? product.price * (1 - discount / 100) : product.price;
-
-        // Check if the product is already in the cart
-        const existingItem = req.session.cart.find(item => item.productId === productId);
-        if (existingItem) {
-            existingItem.quantity += quantity;  // If product exists, update the quantity
-        } else {
-            req.session.cart.push({
-                productId: product.id,
-                productName: product.productName,
-                price: finalPrice,
-                originalPrice: product.price,
-                quantity: quantity,
-                image: product.image
-            });
-        }
-
-        await persistCart(req);
-
-        // Redirect to the cart page
-        res.redirect('/cart');
-    } catch (error) {
-        console.error('Database query error:', error.message);
-        res.status(500).send('Error retrieving product');
-    }
-});
+app.post('/add-to-cart/:id', checkAuthenticated, (req, res) => orderController.addToCart(req, res));
 
 // Update item quantity in cart (set to new value; 0 removes)
-app.post('/cart/item/:id/update', checkAuthenticated, async (req, res) => {
-    const productId = Number(req.params.id);
-    const qty = Number(req.body.quantity);
-    if (!Number.isFinite(productId)) {
-        req.flash('error', 'Invalid product.');
-        return res.redirect('/cart');
-    }
-    if (!Number.isFinite(qty) || qty < 0) {
-        req.flash('error', 'Quantity must be 0 or more.');
-        return res.redirect('/cart');
-    }
-
-    const cart = req.session.cart || [];
-    const idx = cart.findIndex(item => Number(item.productId) === productId);
-    if (idx === -1) {
-        req.flash('error', 'Item not found in cart.');
-        return res.redirect('/cart');
-    }
-
-    try {
-        const product = await ProductModel.getById(productId);
-        if (!product) {
-            req.flash('error', 'Product not found.');
-            return res.redirect('/cart');
-        }
-
-        const availableStock = Number(product.quantity) || 0;
-        if (qty > availableStock) {
-            req.flash('error', `Only ${availableStock} left in stock for ${product.productName}.`);
-            return res.redirect('/cart');
-        }
-
-        if (qty === 0) {
-            cart.splice(idx, 1);
-            req.flash('success', 'Item removed from cart.');
-        } else {
-            cart[idx].quantity = qty;
-            req.flash('success', 'Cart updated.');
-        }
-        req.session.cart = cart;
-        await persistCart(req);
-        return res.redirect('/cart');
-    } catch (err) {
-        console.error('Error updating cart item:', err.message);
-        req.flash('error', 'Unable to update cart right now.');
-        return res.redirect('/cart');
-    }
-});
+app.post('/cart/item/:id/update', checkAuthenticated, (req, res) => orderController.updateCartItem(req, res));
 
 // Delete item from cart
-app.post('/cart/item/:id/delete', checkAuthenticated, async (req, res) => {
-    const productId = Number(req.params.id);
-    if (!Number.isFinite(productId)) {
-        req.flash('error', 'Invalid product.');
-        return res.redirect('/cart');
-    }
-    const cart = req.session.cart || [];
-    const nextCart = cart.filter(item => Number(item.productId) !== productId);
-    if (nextCart.length === cart.length) {
-        req.flash('error', 'Item not found in cart.');
-    } else {
-        req.flash('success', 'Item removed from cart.');
-    }
-    req.session.cart = nextCart;
-    await persistCart(req);
-    res.redirect('/cart');
-});
+app.post('/cart/item/:id/delete', checkAuthenticated, (req, res) => orderController.deleteCartItem(req, res));
 
 // Checkout route now handled by OrderController (persists the order)
 app.post('/checkout', checkAuthenticated, (req, res) => orderController.checkout(req, res));
 
 
 // Logout route - Destroy session and log the user out
-app.get('/logout', async (req, res) => {
-    // Persist cart before destroying session so it can be restored on next login
-    await persistCart(req);
-
-    // Set the flash message before destroying the session
-    req.flash('success', 'You have been logged out.');
-    
-    req.session.destroy((err) => {
-        if (err) {
-            return res.status(500).send('Error logging out');
-        }
-
-        // Clear the session cookie
-        res.clearCookie('connect.sid');
-        
-        // Redirect to the login page after logging out
-        res.redirect('/login');
-    });
-});
+app.get('/logout', (req, res) => userController.logout(req, res));
 
 
 
