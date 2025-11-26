@@ -56,6 +56,176 @@ function summarizeCart(cart = [], { membershipPercent = 0, membershipPlan = '' }
   };
 }
 
+async function persistCart(user, items) {
+  const userId = (resolveUserId && resolveUserId(user)) || null;
+  if (!userId) return;
+  const cartItems = Array.isArray(items) ? items : [];
+  try {
+    await OrderModel.saveCart(userId, cartItems);
+  } catch (err) {
+    console.error('Unable to save cart:', err.message);
+  }
+}
+
+async function renderCart(req, res) {
+  let cart = req.session.cart || [];
+  const membership = getMembershipBenefit(req.session.user);
+
+  try {
+    if (!cart.length) {
+      const savedCart = await OrderModel.getCartByUserId(resolveUserId(req.session.user));
+      if (Array.isArray(savedCart) && savedCart.length) {
+        cart = savedCart;
+        req.session.cart = savedCart;
+      }
+    }
+
+    const cartWithStock = [];
+    let hasStockIssue = false;
+
+    for (const item of cart) {
+      const product = await ProductModel.getById(item.productId);
+      const availableStock = product ? Number(product.quantity) || 0 : 0;
+      const currentQty = Number(item.quantity) || 0;
+      const outOfStock = availableStock <= 0;
+      const exceeds = currentQty > availableStock;
+      if (outOfStock || exceeds) hasStockIssue = true;
+
+      cartWithStock.push({
+        ...item,
+        availableStock,
+        maxAllowed: Math.max(currentQty, availableStock),
+        stockIssue: outOfStock ? 'Out of stock' : (exceeds ? `Only ${availableStock} left` : '')
+      });
+    }
+
+    const summary = summarizeCart(cartWithStock, membership);
+    return res.render('cart', { cart: cartWithStock, summary, hasStockIssue });
+  } catch (err) {
+    console.error('Error loading cart:', err.message);
+    req.flash('error', 'Unable to load cart right now.');
+    const summary = summarizeCart(cart, membership);
+    return res.render('cart', { cart, summary, hasStockIssue: false });
+  }
+}
+
+async function addToCart(req, res) {
+  try {
+    const productId = parseInt(req.params.id);
+    const quantity = parseInt(req.body.quantity) || 1;
+
+    const product = await ProductModel.getById(productId);
+    if (!product) return res.status(404).send('Product not found');
+    const availableStock = Number(product.quantity) || 0;
+    if (availableStock <= 0) {
+      req.flash('error', `${product.productName} is out of stock.`);
+      return res.redirect('/shopping');
+    }
+    if (quantity > availableStock) {
+      req.flash('error', `Only ${availableStock} left for ${product.productName}.`);
+      return res.redirect('/shopping');
+    }
+    if (quantity <= 0) {
+      req.flash('error', 'Quantity must be at least 1.');
+      return res.redirect('/shopping');
+    }
+
+    if (!req.session.cart) {
+      req.session.cart = [];
+    }
+
+    const discount = Number(product.discountPercent) || 0;
+    const finalPrice = discount > 0 ? product.price * (1 - discount / 100) : product.price;
+
+    const existingItem = req.session.cart.find(item => item.productId === productId);
+    if (existingItem) {
+      existingItem.quantity += quantity;
+    } else {
+      req.session.cart.push({
+        productId: product.id,
+        productName: product.productName,
+        price: finalPrice,
+        originalPrice: product.price,
+        quantity: quantity,
+        image: product.image
+      });
+    }
+
+    await persistCart(req.session.user, req.session.cart);
+    res.redirect('/cart');
+  } catch (error) {
+    console.error('Database query error:', error.message);
+    res.status(500).send('Error retrieving product');
+  }
+}
+
+async function updateCartItem(req, res) {
+  const productId = Number(req.params.id);
+  const qty = Number(req.body.quantity);
+  if (!Number.isFinite(productId)) {
+    req.flash('error', 'Invalid product.');
+    return res.redirect('/cart');
+  }
+  if (!Number.isFinite(qty) || qty < 0) {
+    req.flash('error', 'Quantity must be 0 or more.');
+    return res.redirect('/cart');
+  }
+
+  const cart = req.session.cart || [];
+  const idx = cart.findIndex(item => Number(item.productId) === productId);
+  if (idx === -1) {
+    req.flash('error', 'Item not found in cart.');
+    return res.redirect('/cart');
+  }
+
+  try {
+    const product = await ProductModel.getById(productId);
+    if (!product) {
+      req.flash('error', 'Product not found.');
+      return res.redirect('/cart');
+    }
+
+    const availableStock = Number(product.quantity) || 0;
+    if (qty > availableStock) {
+      req.flash('error', `Only ${availableStock} left in stock for ${product.productName}.`);
+      return res.redirect('/cart');
+    }
+
+    if (qty === 0) {
+      cart.splice(idx, 1);
+      req.flash('success', 'Item removed from cart.');
+    } else {
+      cart[idx].quantity = qty;
+      req.flash('success', 'Cart updated.');
+    }
+    req.session.cart = cart;
+    await persistCart(req.session.user, req.session.cart);
+    return res.redirect('/cart');
+  } catch (err) {
+    console.error('Error updating cart item:', err.message);
+    req.flash('error', 'Unable to update cart right now.');
+    return res.redirect('/cart');
+  }
+}
+
+async function deleteCartItem(req, res) {
+  const productId = Number(req.params.id);
+  if (!Number.isFinite(productId)) {
+    req.flash('error', 'Invalid product.');
+    return res.redirect('/cart');
+  }
+  const cart = req.session.cart || [];
+  const nextCart = cart.filter(item => Number(item.productId) !== productId);
+  if (nextCart.length === cart.length) {
+    req.flash('error', 'Item not found in cart.');
+  } else {
+    req.flash('success', 'Item removed from cart.');
+  }
+  req.session.cart = nextCart;
+  await persistCart(req.session.user, req.session.cart);
+  res.redirect('/cart');
+}
+
 async function checkout(req, res) {
   const cart = req.session.cart || [];
   if (!cart.length) {
@@ -319,6 +489,11 @@ module.exports = {
   list,
   detail,
   summarizeCart,
+  renderCart,
+  addToCart,
+  updateCartItem,
+  deleteCartItem,
+  persistCart,
   renderUserOrders,
   renderAdminOrders,
   renderInvoice,
