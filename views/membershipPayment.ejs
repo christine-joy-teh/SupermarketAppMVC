@@ -74,7 +74,7 @@
       </div>
 
       <% const showConfirm = user && (confirm === '1' || confirm === 1 || planKey); %>
-      <% if (showConfirm) { const selectedPlan = plans[planKey] || plans.silver; %>
+      <% if (showConfirm) { const selectedPlan = plans[planKey] || plans.silver; const isFree = String(selectedPlan.priceLabel).toLowerCase().includes('free'); %>
         <div class="card shadow-sm mt-4">
           <div class="card-body">
             <div class="d-flex justify-content-between align-items-center">
@@ -90,27 +90,33 @@
             </div>
             <form action="/membership/payment" method="POST" class="mt-3">
               <input type="hidden" name="plan" value="<%= planKey %>">
-              <div class="row g-3">
-                <div class="col-md-6">
-                  <label class="form-label">Name on card</label>
-                  <input type="text" name="cardName" class="form-control" placeholder="Jane Doe" required>
+              <% if (!isFree) { %>
+                <div class="row g-3">
+                  <div class="col-md-6">
+                    <label class="form-label">Name on card</label>
+                    <input type="text" name="cardName" class="form-control" placeholder="Jane Doe" required>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">Card number</label>
+                    <input type="text" name="cardNumber" class="form-control" placeholder="4242 4242 4242 4242" inputmode="numeric" required>
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label">Expiry (MM/YY)</label>
+                    <input type="text" name="expiry" class="form-control" placeholder="04/27" required>
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label">CVV</label>
+                    <input type="text" name="cvv" class="form-control" placeholder="123" inputmode="numeric" required>
+                  </div>
                 </div>
-                <div class="col-md-6">
-                  <label class="form-label">Card number</label>
-                  <input type="text" name="cardNumber" class="form-control" placeholder="4242 4242 4242 4242" inputmode="numeric" required>
+              <% } else { %>
+                <div class="alert alert-info mt-3 mb-0">
+                  No payment needed for Basic. Click confirm to switch plans.
                 </div>
-                <div class="col-md-3">
-                  <label class="form-label">Expiry (MM/YY)</label>
-                  <input type="text" name="expiry" class="form-control" placeholder="04/27" required>
-                </div>
-                <div class="col-md-3">
-                  <label class="form-label">CVV</label>
-                  <input type="text" name="cvv" class="form-control" placeholder="123" inputmode="numeric" required>
-                </div>
-              </div>
+              <% } %>
               <div class="d-flex flex-column flex-sm-row gap-2 mt-3">
                 <a href="/shopping" class="btn btn-outline-secondary w-100">Back to shopping</a>
-                <button type="submit" class="btn btn-primary w-100">Proceed to payment</button>
+                <button type="submit" class="btn btn-primary w-100"><%= isFree ? 'Confirm plan' : 'Proceed to payment' %></button>
               </div>
             </form>
           </div>

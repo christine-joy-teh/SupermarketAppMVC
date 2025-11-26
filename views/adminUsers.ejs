@@ -4,8 +4,8 @@
     { href: '/inventory', label: 'Inventory' },
     { href: '/addProduct', label: 'Add Product' },
     { href: '/admin/orders', label: 'Orders' },
-    { href: '/admin/promotion', label: 'Promotion' },
-    { href: '/admin/users', label: 'Users', active: true }
+    { href: '/admin/users', label: 'Users', active: true },
+    { href: '/admin/promotion', label: 'Promotion' }
   ],
   navLinksRight: [
     { href: '/logout', label: 'Logout' }
@@ -49,7 +49,12 @@
               <td><%= u.id %></td>
               <td><%= u.username %></td>
               <td><%= u.email %></td>
-              <td><span class="badge bg-secondary text-uppercase"><%= u.role %></span></td>
+              <td>
+                <span class="badge bg-secondary text-uppercase"><%= u.role %></span>
+                <% if (u.disabled) { %>
+                  <span class="badge bg-danger ms-1">Disabled</span>
+                <% } %>
+              </td>
               <td>
                 <% if (typeof u.plan === 'undefined') { %>
                   <span class="text-muted">n/a</span>
@@ -64,8 +69,11 @@
               <td class="text-center">
                 <div class="d-flex justify-content-center gap-2">
                   <a href="/admin/users/<%= u.id %>/edit" class="btn btn-sm btn-outline-primary">Edit</a>
-                  <form action="/admin/users/<%= u.id %>/delete" method="POST" onsubmit="return confirm('Delete this user?');">
-                    <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                  <form action="/admin/users/<%= u.id %>/disable" method="POST">
+                    <input type="hidden" name="disabled" value="<%= u.disabled ? 0 : 1 %>">
+                    <button type="submit" class="btn btn-sm <%= u.disabled ? 'btn-success' : 'btn-outline-danger' %>">
+                      <%= u.disabled ? 'Enable' : 'Disable' %>
+                    </button>
                   </form>
                 </div>
               </td>

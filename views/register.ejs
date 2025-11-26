@@ -87,31 +87,6 @@
                       <div class="invalid-feedback">You must agree before registering.</div>
                     </div>
 
-                    <div id="payment-section" class="card border-warning d-none mb-3">
-                      <div class="card-body">
-                        <h6 class="card-title mb-2 text-warning">Payment details (for Silver/Gold)</h6>
-                        <div class="row g-2">
-                          <div class="col-md-6">
-                            <label class="form-label">Name on card</label>
-                            <input type="text" name="cardName" class="form-control" placeholder="Jane Doe">
-                          </div>
-                          <div class="col-md-6">
-                            <label class="form-label">Card number</label>
-                            <input type="text" name="cardNumber" class="form-control" placeholder="4242 4242 4242 4242" inputmode="numeric">
-                          </div>
-                          <div class="col-md-3">
-                            <label class="form-label">Expiry (MM/YY)</label>
-                            <input type="text" name="expiry" class="form-control" placeholder="04/27">
-                          </div>
-                          <div class="col-md-3">
-                            <label class="form-label">CVV</label>
-                            <input type="text" name="cvv" class="form-control" placeholder="123" inputmode="numeric">
-                          </div>
-                        </div>
-                        <small class="text-muted d-block mt-2">Shown only when a paid plan is selected.</small>
-                      </div>
-                    </div>
-
                     <div class="d-grid">
                       <button type="submit" class="btn btn-primary btn-lg">Create account</button>
                     </div>
@@ -122,13 +97,13 @@
                   <div class="card p-3">
                     <h5 class="mb-2">Selected plan</h5>
                     <div id="selected-plan-card" class="plan-card plan-selected mb-3" style="width:100%">
-                      <div class="plan-name">Silver</div>
-                      <div class="plan-price">$4.99 / mo</div>
-                      <div class="plan-features">Free delivery over $50 · 5% off selected items</div>
-                      <div class="plan-badge">Popular</div>
+                      <div class="plan-name">Basic</div>
+                      <div class="plan-price">Free</div>
+                      <div class="plan-features">Standard checkout</div>
+                      <div class="plan-badge">Default</div>
                     </div>
 
-                    <div id="plan-help" class="text-muted small mb-2">Selected: SILVER — this will be saved to your account.</div>
+                    <div id="plan-help" class="text-muted small mb-2">Default plan is BASIC. You can upgrade to Silver/Gold later.</div>
 
                     <hr>
                     <h6 class="mb-2">Change plan</h6>
@@ -161,10 +136,9 @@
                   const cards = document.querySelectorAll('.plan-row .plan-card');
                   const selectedCardContainer = document.getElementById('selected-plan-card');
                   const help = document.getElementById('plan-help');
-                  const paymentSection = document.getElementById('payment-section');
 
                   const planInfo = {
-                    basic: {name:'Basic', price:'Free', features:'Browse products · Standard checkout', badge:'No cost'},
+                    basic: {name:'Basic', price:'Free', features:'Standard checkout', badge:'Default'},
                     silver: {name:'Silver', price:'$4.99 / mo', features:'Free delivery over $50 · 5% off selected items', badge:'Popular'},
                     gold: {name:'Gold', price:'$9.99 / mo', features:'Free delivery · 10% off storewide · Priority support', badge:'Best value'}
                   };
@@ -178,19 +152,15 @@
                     // toggle selection visually across selectable plan cards only
                     document.querySelectorAll('.plan-row .plan-card').forEach(c=> c.classList.toggle('plan-selected', c.dataset.plan === plan));
                     hidden.value = plan || '';
-                    if(plan) help.textContent = 'Selected: ' + plan.toUpperCase() + ' — this will be saved to your account.';
+                    if(plan) help.textContent = 'Selected: ' + plan.toUpperCase() + ' — you can pay for membership at checkout later.';
                     else help.textContent = 'Select a plan to apply perks to your account. You can skip and choose later.';
                     renderSelected(plan);
-                    if (paymentSection) {
-                      const paid = plan && plan !== 'basic';
-                      paymentSection.classList.toggle('d-none', !paid);
-                    }
                   }
 
                   cards.forEach(c=> c.addEventListener('click', ()=> selectPlan(c.dataset.plan)));
-                  // preselect from server-provided query param or default to silver
+                  // preselect from server-provided query param or default to basic
                   const initial = '<%= typeof plan !== "undefined" ? plan : "" %>';
-                  const toSelect = initial || 'silver';
+                  const toSelect = initial || 'basic';
                   if(toSelect) selectPlan(toSelect);
 
                   // Password toggle and strength meter

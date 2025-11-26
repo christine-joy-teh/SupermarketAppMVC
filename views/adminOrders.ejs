@@ -33,12 +33,13 @@
       <thead>
         <tr>
           <th>ID</th>
-          <th>User ID</th>
+          <th>User</th>
           <th>Total</th>
           <th>Savings</th>
           <th>Status</th>
           <th>Delivery</th>
           <th>Created</th>
+          <th>Invoice</th>
           <th class="text-center">Update</th>
           <th class="text-center">Delete</th>
         </tr>
@@ -56,12 +57,24 @@
                   #<%= o.id %>
                 </a>
               </td>
-              <td><%= o.userId || o.user_id || 'N/A' %></td>
+              <td>
+                <% if (o.userName || o.userEmail) { %>
+                  <div class="d-flex flex-column">
+                    <span class="fw-semibold"><%= o.userName || 'Unknown user' %></span>
+                    <small class="text-muted"><%= o.userEmail || 'No email' %></small>
+                  </div>
+                <% } else { %>
+                  <span class="text-muted">User ID: <%= o.userId || o.user_id || 'N/A' %></span>
+                <% } %>
+              </td>
               <td>$<%= Number(o.total || 0).toFixed(2) %></td>
               <td>$<%= Number(o.savings || 0).toFixed(2) %></td>
               <td><span class="badge bg-secondary text-uppercase"><%= o.status %></span></td>
               <td><span class="badge bg-light text-dark text-uppercase"><%= o.deliveryMethod || 'delivery' %></span></td>
               <td><%= o.createdAt ? new Date(o.createdAt).toLocaleString() : '' %></td>
+              <td>
+                <a href="/orders/<%= o.id %>/invoice" class="btn btn-sm btn-outline-secondary" target="_blank">Invoice</a>
+              </td>
               <td class="text-center">
                 <form action="/admin/orders/<%= o.id %>/status" method="POST" class="d-flex gap-2 justify-content-center">
                   <select name="status" class="form-select form-select-sm" style="max-width: 150px;">

@@ -42,15 +42,20 @@
                 <td><%= cart[i].productName %></td>
                 <td><img src="/images/<%= cart[i].image %>" width="80" class="img-thumbnail"></td>
                 <td>
-                  <form action="/cart/item/<%= cart[i].productId %>/update" method="POST" class="d-flex align-items-center gap-2">
+                  <form action="/cart/item/<%= cart[i].productId %>/update" method="POST" class="d-flex flex-column gap-1">
                     <% const available = Number(cart[i].availableStock); %>
                     <% const qtyVal = Number(cart[i].quantity) || 0; %>
                     <% const maxQty = Math.max(qtyVal, Number.isFinite(available) ? available : 0); %>
-                    <input type="number" name="quantity" min="0" step="1" value="<%= qtyVal %>" <% if (maxQty > 0) { %>max="<%= maxQty %>"<% } %> class="form-control form-control-sm" style="width: 80px;">
-                    <% if (Number.isFinite(available)) { %>
-                      <small class="text-muted">Available: <%= available %></small>
+                    <div class="d-flex align-items-center gap-2">
+                      <input type="number" name="quantity" min="0" step="1" value="<%= qtyVal %>" <% if (maxQty > 0) { %>max="<%= maxQty %>"<% } %> class="form-control form-control-sm" style="width: 80px;" <%= available <= 0 ? 'disabled' : '' %>>
+                      <% if (Number.isFinite(available)) { %>
+                        <small class="text-muted">Available: <%= available %></small>
+                      <% } %>
+                      <button type="submit" class="btn btn-sm btn-outline-primary" <%= available <= 0 ? 'disabled' : '' %>>Update</button>
+                    </div>
+                    <% if (cart[i].stockIssue) { %>
+                      <small class="text-danger"><%= cart[i].stockIssue %></small>
                     <% } %>
-                    <button type="submit" class="btn btn-sm btn-outline-primary">Update</button>
                   </form>
                 </td>
                 <td>
@@ -157,7 +162,10 @@
               </div>
             </div>
           </div>
-          <button class="btn btn-success w-100">Checkout</button>
+          <button class="btn btn-success w-100" <%= hasStockIssue ? 'disabled' : '' %>>Checkout</button>
+          <% if (hasStockIssue) { %>
+            <div class="mt-2 text-danger small">Some items are out of stock. Please remove them before checkout.</div>
+          <% } %>
         </form>
       </div>
     <% } %>

@@ -4,8 +4,8 @@
     { href: '/inventory', label: 'Inventory' },
     { href: '/addProduct', label: 'Add Product' },
     { href: '/admin/orders', label: 'Orders' },
-    { href: '/admin/promotion', label: 'Promotion' },
-    { href: '/admin/users', label: 'Users' }
+    { href: '/admin/users', label: 'Users', active: true },
+    { href: '/admin/promotion', label: 'Promotion' }
   ],
   navLinksRight: [
     { href: '/logout', label: 'Logout' }
@@ -47,6 +47,11 @@
           <option value="gold" <%= targetUser.plan === 'gold' ? 'selected' : '' %>>Gold</option>
         </select>
         <small class="text-muted">Choose a membership for this user.</small>
+      </div>
+      <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" value="1" id="disabled" name="disabled" <%= targetUser.disabled ? 'checked' : '' %>>
+        <label class="form-check-label" for="disabled">Disable account</label>
+        <small class="text-muted d-block">Disabled users cannot log in.</small>
       </div>
       <div class="mb-3">
         <label class="form-label" for="contact">Contact</label>
