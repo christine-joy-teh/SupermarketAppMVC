@@ -2,6 +2,7 @@ const db = require('../config/db');
 
 // Admin-facing user helpers
 let planColumnReady;
+let disabledColumnReady;
 
 async function ensurePlanColumn() {
   const dbName =
@@ -46,12 +47,44 @@ async function hasPlanColumn() {
   return planColumnReady;
 }
 
+async function ensureDisabledColumn() {
+  const dbName =
+    (db.config && db.config.connectionConfig && db.config.connectionConfig.database) ||
+    (db.config && db.config.database) ||
+    process.env.DB_NAME;
+  try {
+    const [exists] = await db.query(
+      "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND COLUMN_NAME = 'disabled'",
+      [dbName]
+    );
+    if (exists.length) return true;
+  } catch (err) {
+    console.warn('Disabled column check failed:', err.message);
+  }
+  try {
+    await db.query("ALTER TABLE users ADD COLUMN disabled TINYINT(1) NOT NULL DEFAULT 0");
+  } catch (err) {
+    if (err.code !== 'ER_DUP_FIELDNAME') {
+      console.warn('Disabled column migration skipped:', err.message);
+    }
+  }
+  return true;
+}
+
+async function hasDisabledColumn() {
+  if (!disabledColumnReady) {
+    disabledColumnReady = ensureDisabledColumn();
+  }
+  return disabledColumnReady;
+}
+
 async function list() {
   // Prefer selecting plan; if column is missing, fall back gracefully.
-  const fieldsWithPlan = 'id, username, email, address, contact, role, plan';
+  const fieldsWithPlan = 'id, username, email, address, contact, role, plan, disabled';
   const fieldsWithoutPlan = 'id, username, email, address, contact, role';
   try {
     await hasPlanColumn();
+    await hasDisabledColumn();
     const [rows] = await db.query(`SELECT ${fieldsWithPlan} FROM users ORDER BY id DESC`);
     return rows;
   } catch (err) {
@@ -62,10 +95,11 @@ async function list() {
 }
 
 async function getById(id) {
-  const fieldsWithPlan = 'id, username, email, address, contact, role, plan';
+  const fieldsWithPlan = 'id, username, email, address, contact, role, plan, disabled';
   const fieldsWithoutPlan = 'id, username, email, address, contact, role';
   try {
     await hasPlanColumn();
+    await hasDisabledColumn();
     const [rows] = await db.query(`SELECT ${fieldsWithPlan} FROM users WHERE id = ?`, [id]);
     return rows[0] || null;
   } catch (err) {
@@ -75,7 +109,7 @@ async function getById(id) {
   }
 }
 
-async function update(id, { username, email, address, contact, role, plan }) {
+async function update(id, { username, email, address, contact, role, plan, disabled }) {
   const setters = [];
   const params = [];
 
@@ -111,6 +145,18 @@ async function update(id, { username, email, address, contact, role, plan }) {
       // column missing; skip plan silently
     }
   }
+  if (typeof disabled !== 'undefined') {
+    try {
+      await hasDisabledColumn();
+      setters.push('disabled = ?');
+      params.push(disabled ? 1 : 0);
+    } catch (err) {
+      if (err.code !== 'ER_BAD_FIELD_ERROR') {
+        throw err;
+      }
+      // column missing; skip disabled silently
+    }
+  }
 
   if (!setters.length) return { affectedRows: 0 };
 
@@ -136,9 +182,46 @@ async function remove(id) {
   return result;
 }
 
+async function findByEmail(email) {
+  const [rows] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
+  return rows[0] || null;
+}
+
+async function create({ username, email, password, address, contact, plan }) {
+  await hasPlanColumn();
+
+  // Try inserting with plan; if column missing, fall back without it
+  const baseParams = [username, email, password, address, contact, 'user'];
+  try {
+    const [result] = await db.query(
+      'INSERT INTO users (username, email, password, address, contact, role, plan) VALUES (?, ?, SHA1(?), ?, ?, ?, ?)',
+      [...baseParams, plan]
+    );
+    return result;
+  } catch (err) {
+    if (err.code !== 'ER_BAD_FIELD_ERROR') throw err;
+    const [result] = await db.query(
+      'INSERT INTO users (username, email, password, address, contact, role) VALUES (?, ?, SHA1(?), ?, ?, ?)',
+      baseParams
+    );
+    return result;
+  }
+}
+
+async function authenticate(email, password) {
+  const [rows] = await db.query(
+    'SELECT * FROM users WHERE email = ? AND password = SHA1(?)',
+    [email, password]
+  );
+  return rows[0] || null;
+}
+
 module.exports = {
   list,
   getById,
   update,
-  remove
+  remove,
+  findByEmail,
+  create,
+  authenticate
 };

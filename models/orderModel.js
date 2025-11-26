@@ -158,7 +158,12 @@ async function createOrder({ userId, subtotal, total, savings, status = 'process
 
 async function getAllOrders() {
   await tableReady;
-  const [rows] = await db.query('SELECT * FROM orders ORDER BY id DESC');
+  const [rows] = await db.query(`
+    SELECT o.*, u.username AS userName, u.email AS userEmail
+    FROM orders o
+    LEFT JOIN users u ON u.id = o.userId OR u.id = o.user_id
+    ORDER BY o.id DESC
+  `);
   return rows.map(mapOrderRow);
 }
 
