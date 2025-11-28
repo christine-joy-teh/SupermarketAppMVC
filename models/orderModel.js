@@ -196,9 +196,13 @@ async function deleteOrder(id) {
 async function getCartByUserId(userId) {
   await cartTableReady;
   const [rows] = await db.query('SELECT items FROM user_carts WHERE userId = ?', [userId]);
-  if (!rows.length || !rows[0].items) return [];
+  if (!rows.length || typeof rows[0].items === 'undefined' || rows[0].items === null) return [];
+  const raw = rows[0].items;
   try {
-    return JSON.parse(rows[0].items);
+    if (typeof raw === 'string') return JSON.parse(raw);
+    if (Buffer.isBuffer(raw)) return JSON.parse(raw.toString('utf8'));
+    if (typeof raw === 'object') return raw; // MySQL JSON columns may already be parsed
+    return [];
   } catch (err) {
     console.warn('Unable to parse stored cart for user', userId, err.message);
     return [];
