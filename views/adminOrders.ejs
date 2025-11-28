@@ -41,7 +41,6 @@
           <th>Created</th>
           <th>Invoice</th>
           <th class="text-center">Update</th>
-          <th class="text-center">Delete</th>
         </tr>
       </thead>
       <tbody>
@@ -85,16 +84,11 @@
                   <button type="submit" class="btn btn-sm btn-outline-primary">Save</button>
                 </form>
               </td>
-              <td class="text-center">
-                <form action="/admin/orders/<%= o.id %>/delete" method="POST" onsubmit="return confirm('Delete order #<%= o.id %>?');">
-                  <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
-                </form>
-              </td>
             </tr>
           <% }) %>
         <% } else { %>
           <tr>
-            <td colspan="8" class="text-center text-muted">No orders found.</td>
+            <td colspan="9" class="text-center text-muted">No orders found.</td>
           </tr>
         <% } %>
       </tbody>
