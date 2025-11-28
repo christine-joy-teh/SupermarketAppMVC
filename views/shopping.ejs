@@ -4,10 +4,10 @@
     action: '/shopping',
     queryValue: (typeof q !== 'undefined') ? q : '',
     sortValue: (typeof sort !== 'undefined') ? sort : '',
-    sortOptions: [
+        sortOptions: [
       { value: '', label: 'Sort' },
-      { value: 'price_asc', label: 'Price: Low ↑' },
-      { value: 'price_desc', label: 'Price: High ↓' }
+      { value: 'price_asc', label: 'Price: Low to High' },
+      { value: 'price_desc', label: 'Price: High to Low' }
     ],
     buttonLabel: 'Search'
   },
@@ -66,12 +66,8 @@
               </p>
 
               <form action="/add-to-cart/<%= p.id %>" method="POST" class="mt-auto d-flex">
-                <select class="form-select me-2" name="quantity" style="width:80px;">
-                  <% for (let q = 1; q <= Math.min(10, p.quantity || 10); q++) { %>
-                    <option value="<%= q %>"><%= q %></option>
-                  <% } %>
-                </select>
-                <button class="btn btn-primary">Add</button>
+                <input type="number" class="form-control me-2" name="quantity" min="1" max="<%= p.quantity || 1 %>" value="1" style="width:90px;">
+                <button class="btn btn-primary" <%= (p.quantity || 0) <= 0 ? 'disabled' : '' %>>Add</button>
               </form>
             </div>
           </div>

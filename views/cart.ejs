@@ -21,6 +21,9 @@
       <p>Your cart is empty.</p>
       <a href="/shopping" class="btn btn-primary">Browse Products</a>
     <% } else { %>
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <a href="/shopping" class="btn btn-secondary">Back</a>
+      </div>
       <table class="table table-bordered">
         <thead>
           <tr>
@@ -39,15 +42,20 @@
                 <td><%= cart[i].productName %></td>
                 <td><img src="/images/<%= cart[i].image %>" width="80" class="img-thumbnail"></td>
                 <td>
-                  <form action="/cart/item/<%= cart[i].productId %>/update" method="POST" class="d-flex align-items-center gap-2">
+                  <form action="/cart/item/<%= cart[i].productId %>/update" method="POST" class="d-flex flex-column gap-1">
                     <% const available = Number(cart[i].availableStock); %>
                     <% const qtyVal = Number(cart[i].quantity) || 0; %>
                     <% const maxQty = Math.max(qtyVal, Number.isFinite(available) ? available : 0); %>
-                    <input type="number" name="quantity" min="0" step="1" value="<%= qtyVal %>" <% if (maxQty > 0) { %>max="<%= maxQty %>"<% } %> class="form-control form-control-sm" style="width: 80px;">
-                    <% if (Number.isFinite(available)) { %>
-                      <small class="text-muted">Available: <%= available %></small>
+                    <div class="d-flex align-items-center gap-2">
+                      <input type="number" name="quantity" min="0" step="1" value="<%= qtyVal %>" <% if (maxQty > 0) { %>max="<%= maxQty %>"<% } %> class="form-control form-control-sm" style="width: 80px;" <%= available <= 0 ? 'disabled' : '' %>>
+                      <% if (Number.isFinite(available)) { %>
+                        <small class="text-muted">Available: <%= available %></small>
+                      <% } %>
+                      <button type="submit" class="btn btn-sm btn-outline-primary" <%= available <= 0 ? 'disabled' : '' %>>Update</button>
+                    </div>
+                    <% if (cart[i].stockIssue) { %>
+                      <small class="text-danger"><%= cart[i].stockIssue %></small>
                     <% } %>
-                    <button type="submit" class="btn btn-sm btn-outline-primary">Update</button>
                   </form>
                 </td>
                 <td>
@@ -72,34 +80,36 @@
         </tbody>
       </table>
       <div class="d-flex justify-content-between align-items-center">
-        <div>
-          <% const orderSummary = (typeof summary !== 'undefined' && summary) ? summary : null; %>
-          <% const promoDetails = orderSummary ? orderSummary.promo : null; %>
-          <% const membership = orderSummary ? orderSummary.membership : null; %>
-          <h5 class="mb-1">Subtotal: $<%= orderSummary ? orderSummary.totalBefore.toFixed(2) : total.toFixed(2) %></h5>
-          <% if (promoDetails) { %>
-            <div class="text-muted small">
-              Promo: <%= promoDetails.percent ? promoDetails.percent : 0 %>% off
-              <%= promoDetails.keywords ? promoDetails.keywords.join(', ') : 'selected items' %>
-            </div>
-            <% if (orderSummary && orderSummary.promoSavings > 0) { %>
-              <div class="text-success">Promotion applied: -$<%= orderSummary.promoSavings.toFixed(2) %></div>
+        <% const orderSummary = (typeof summary !== 'undefined' && summary) ? summary : null; %>
+        <% const promoDetails = orderSummary ? orderSummary.promo : null; %>
+        <% const membership = orderSummary ? orderSummary.membership : null; %>
+        <div class="card bg-light border-0 shadow-sm w-100" style="max-width: 420px;">
+          <div class="card-body">
+            <h6 class="text-uppercase text-muted small mb-2">Order summary</h6>
+            <h5 class="mb-1">Subtotal: $<%= orderSummary ? orderSummary.totalBefore.toFixed(2) : total.toFixed(2) %></h5>
+            <% if (promoDetails) { %>
+              <div class="text-muted small">
+                Promo: <%= promoDetails.percent ? promoDetails.percent : 0 %>% off
+                <%= promoDetails.keywords ? promoDetails.keywords.join(', ') : 'selected items' %>
+              </div>
+              <% if (orderSummary && orderSummary.promoSavings > 0) { %>
+                <div class="text-success">Promotion applied: -$<%= orderSummary.promoSavings.toFixed(2) %></div>
+              <% } %>
             <% } %>
-          <% } %>
-          <% if (membership && membership.percent > 0) { %>
-            <div class="text-muted small">
-              Membership: <%= membership.plan ? membership.plan.toUpperCase() : '' %> (<%= membership.percent %>% off)
-            </div>
-            <% if (membership.savings > 0) { %>
-              <div class="text-success">Membership savings: -$<%= membership.savings.toFixed(2) %></div>
+            <% if (membership && membership.percent > 0) { %>
+              <div class="text-muted small">
+                Membership: <%= membership.plan ? membership.plan.toUpperCase() : '' %> (<%= membership.percent %>% off)
+              </div>
+              <% if (membership.savings > 0) { %>
+                <div class="text-success">Membership savings: -$<%= membership.savings.toFixed(2) %></div>
+              <% } %>
             <% } %>
-          <% } %>
-          <h4 class="mt-2">Total: $<%= orderSummary ? orderSummary.totalAfter.toFixed(2) : total.toFixed(2) %></h4>
+            <h4 class="mt-2">Total: $<%= orderSummary ? orderSummary.totalAfter.toFixed(2) : total.toFixed(2) %></h4>
+          </div>
         </div>
       </div>
 
       <div class="mt-4 d-flex">
-        <a href="/shopping" class="btn btn-secondary me-2">Back to Shopping</a>
         <form action="/checkout" method="POST" class="flex-grow-1">
           <div class="card mb-3">
             <div class="card-body">
@@ -112,11 +122,68 @@
                 <input class="form-check-input" type="radio" name="deliveryMethod" id="delivery-pickup" value="pickup">
                 <label class="form-check-label" for="delivery-pickup">Self-collect / pickup</label>
               </div>
+              <div id="delivery-address-block" class="mt-3">
+                <label class="form-label">Delivery address</label>
+                <textarea name="deliveryAddress" class="form-control" rows="2" placeholder="Street, unit number, postal code"></textarea>
+                <small class="text-muted">Add an address even when picking up (for contact or alternate delivery).</small>
+              </div>
+              <div id="pickup-outlet-block" class="mt-3" style="display:none;">
+                <label class="form-label">Pickup outlet</label>
+                <select name="pickupOutlet" class="form-select">
+                  <option value="">Select an outlet</option>
+                  <option value="Woodlands">Woodlands</option>
+                  <option value="Punggol">Punggol</option>
+                  <option value="Orchard">Orchard</option>
+                </select>
+                <small class="text-muted">Choose where you'll collect your order.</small>
+              </div>
             </div>
           </div>
-          <button class="btn btn-success w-100">Checkout</button>
+          <div class="card mb-3">
+            <div class="card-body">
+              <h6 class="card-title mb-2">Payment details</h6>
+              <div class="row g-2">
+                <div class="col-md-6">
+                  <label class="form-label">Name on card</label>
+                  <input type="text" name="cardName" class="form-control" placeholder="Jane Doe" required>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Card number</label>
+                  <input type="text" name="cardNumber" class="form-control" placeholder="4242 4242 4242 4242" inputmode="numeric" required>
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">Expiry (MM/YY)</label>
+                  <input type="text" name="expiry" class="form-control" placeholder="04/27" required>
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">CVV</label>
+                  <input type="text" name="cvv" class="form-control" placeholder="123" inputmode="numeric" required>
+                </div>
+              </div>
+            </div>
+          </div>
+          <button class="btn btn-success w-100" <%= hasStockIssue ? 'disabled' : '' %>>Checkout</button>
+          <% if (hasStockIssue) { %>
+            <div class="mt-2 text-danger small">Some items are out of stock. Please remove them before checkout.</div>
+          <% } %>
         </form>
       </div>
     <% } %>
   </div>
+<script>
+  (function(){
+    const delivery = document.getElementById('delivery-home');
+    const pickup = document.getElementById('delivery-pickup');
+    const addressBlock = document.getElementById('delivery-address-block');
+    const outletBlock = document.getElementById('pickup-outlet-block');
+    function toggleSections(){
+      const isPickup = pickup && pickup.checked;
+      if (outletBlock) outletBlock.style.display = isPickup ? 'block' : 'none';
+      if (addressBlock) addressBlock.style.display = isPickup ? 'none' : 'block';
+    }
+    if (delivery) delivery.addEventListener('change', toggleSections);
+    if (pickup) pickup.addEventListener('change', toggleSections);
+    toggleSections();
+  })();
+</script>
 <%- include('partials/footer') %>

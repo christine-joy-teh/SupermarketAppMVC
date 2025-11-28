@@ -70,36 +70,5 @@
       </div>
     </div>
   </main>
-  <section class="membership py-4 bg-light">
-    <div class="container">
-      <div class="text-center mb-3">
-        <h4>Membership plans</h4>
-        <p class="text-muted small">Choose during sign up to unlock delivery and discounts.</p>
-      </div>
-
-      <div class="plan-row">
-        <div class="plan-card" data-plan="basic" onclick="location='/register?plan=basic'">
-          <div class="plan-name">Basic</div>
-          <div class="plan-price">Free</div>
-          <div class="plan-features">Browse products & standard checkout</div>
-          <button class="btn btn-outline-primary btn-select btn-sm mt-auto">Join Basic</button>
-        </div>
-
-        <div class="plan-card plan-selected" data-plan="silver" onclick="location='/register?plan=silver'">
-          <div class="recommended">Recommended</div>
-          <div class="plan-name">Silver</div>
-          <div class="plan-price">$4.99 / mo</div>
-          <div class="plan-features">Free delivery over $50 • 5% off selected items</div>
-          <button class="btn btn-primary btn-select btn-sm mt-auto">Get Silver</button>
-        </div>
-
-        <div class="plan-card bestseller" data-plan="gold" onclick="location='/register?plan=gold'">
-          <div class="plan-name">Gold</div>
-          <div class="plan-price">$9.99 / mo</div>
-          <div class="plan-features">Free delivery • 10% off storewide • Priority support</div>
-          <button class="btn btn-warning btn-select btn-sm mt-auto">Get Gold</button>
-        </div>
-      </div>
-    </div>
-  </section>
+  <!-- Membership plans removed from login page as requested -->
 <%- include('partials/footer') %>

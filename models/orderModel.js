@@ -9,6 +9,10 @@ const tableReady = ensureOrdersTable().then(cols => {
   console.error('Failed to ensure orders table:', err.message);
 });
 
+const cartTableReady = ensureCartTable().catch(err => {
+  console.error('Failed to ensure user_carts table:', err.message);
+});
+
 async function ensureOrdersTable() {
   await db.query(`
     CREATE TABLE IF NOT EXISTS orders (
@@ -54,6 +58,8 @@ async function ensureOrdersTable() {
   await ensureColumn('itemsJson', 'itemsJson LONGTEXT');
   await ensureColumn('createdAt', 'createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
   await ensureColumn('deliveryMethod', "deliveryMethod VARCHAR(50) DEFAULT 'delivery'");
+  await ensureColumn('deliveryAddress', "deliveryAddress VARCHAR(255) DEFAULT NULL");
+  await ensureColumn('pickupOutlet', "pickupOutlet VARCHAR(255) DEFAULT NULL");
 
   // Loosen existing columns that might be NOT NULL without defaults
   try {
@@ -76,6 +82,16 @@ async function ensureOrdersTable() {
     [dbName]
   );
   return colRows.map(r => r.COLUMN_NAME);
+}
+
+async function ensureCartTable() {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS user_carts (
+      userId INT NOT NULL PRIMARY KEY,
+      items JSON NOT NULL,
+      updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+  `);
 }
 
 function sanitizeCartItems(items = []) {
@@ -104,13 +120,13 @@ function mapOrderRow(row) {
   return { ...row, userId, items };
 }
 
-async function createOrder({ userId, subtotal, total, savings, status = 'processing', cartItems = [], deliveryMethod = 'delivery' }) {
+async function createOrder({ userId, subtotal, total, savings, status = 'processing', cartItems = [], deliveryMethod = 'delivery', deliveryAddress = null, pickupOutlet = null }) {
   await tableReady;
   const normalizedItems = sanitizeCartItems(cartItems);
   // Always write to both userId and user_id (both columns are created in ensureOrdersTable)
   const sql = `
-    INSERT INTO orders (userId, user_id, subtotal, total, savings, status, itemsJson, deliveryMethod)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO orders (userId, user_id, subtotal, total, savings, status, itemsJson, deliveryMethod, deliveryAddress, pickupOutlet)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
   const params = [
     userId || null,
@@ -120,16 +136,34 @@ async function createOrder({ userId, subtotal, total, savings, status = 'process
     savings || 0,
     status,
     JSON.stringify(normalizedItems),
-    deliveryMethod || 'delivery'
+    deliveryMethod || 'delivery',
+    deliveryAddress || null,
+    pickupOutlet || null
   ];
 
   const [result] = await db.query(sql, params);
-  return { id: result.insertId, userId, subtotal, total, savings, status, items: normalizedItems };
+  return {
+    id: result.insertId,
+    userId,
+    subtotal,
+    total,
+    savings,
+    status,
+    items: normalizedItems,
+    deliveryMethod,
+    deliveryAddress,
+    pickupOutlet
+  };
 }
 
 async function getAllOrders() {
   await tableReady;
-  const [rows] = await db.query('SELECT * FROM orders ORDER BY id DESC');
+  const [rows] = await db.query(`
+    SELECT o.*, u.username AS userName, u.email AS userEmail
+    FROM orders o
+    LEFT JOIN users u ON u.id = o.userId OR u.id = o.user_id
+    ORDER BY o.id DESC
+  `);
   return rows.map(mapOrderRow);
 }
 
@@ -159,11 +193,40 @@ async function deleteOrder(id) {
   await db.query('DELETE FROM orders WHERE id = ?', [id]);
 }
 
+async function getCartByUserId(userId) {
+  await cartTableReady;
+  const [rows] = await db.query('SELECT items FROM user_carts WHERE userId = ?', [userId]);
+  if (!rows.length || typeof rows[0].items === 'undefined' || rows[0].items === null) return [];
+  const raw = rows[0].items;
+  try {
+    if (typeof raw === 'string') return JSON.parse(raw);
+    if (Buffer.isBuffer(raw)) return JSON.parse(raw.toString('utf8'));
+    if (typeof raw === 'object') return raw; // MySQL JSON columns may already be parsed
+    return [];
+  } catch (err) {
+    console.warn('Unable to parse stored cart for user', userId, err.message);
+    return [];
+  }
+}
+
+async function saveCart(userId, cartItems = []) {
+  await cartTableReady;
+  const payload = JSON.stringify(cartItems || []);
+  await db.query(
+    `INSERT INTO user_carts (userId, items)
+     VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE items = VALUES(items), updatedAt = CURRENT_TIMESTAMP`,
+    [userId, payload]
+  );
+}
+
 module.exports = {
   createOrder,
   getAllOrders,
   getOrderById,
   getOrdersByUser,
   updateOrderStatus,
-  deleteOrder
+  deleteOrder,
+  getCartByUserId,
+  saveCart
 };

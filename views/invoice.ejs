@@ -15,14 +15,22 @@
     </style>
   `
 }) %>
-<%- include('partials/navbar', {
-  navLinksRight: [
-    { href: '/shopping', label: 'Shop' },
-    { href: '/cart', label: 'Cart', badgeValue: cartCount, badgeClass: 'bg-primary' },
-    { href: '/orders/history', label: 'My Orders', active: true },
-    { href: '/logout', label: 'Logout' }
-  ]
-}) %>
+<%
+  const isAdmin = user && user.role === 'admin';
+  const navLinksRight = isAdmin
+    ? [
+        { href: '/inventory', label: 'Inventory', active: false },
+        { href: '/admin/orders', label: 'Orders', active: false },
+        { href: '/logout', label: 'Logout' }
+      ]
+    : [
+        { href: '/shopping', label: 'Shop' },
+        { href: '/cart', label: 'Cart', badgeValue: cartCount, badgeClass: 'bg-primary' },
+        { href: '/orders/history', label: 'My Orders', active: true },
+        { href: '/logout', label: 'Logout' }
+      ];
+%>
+<%- include('partials/navbar', { navLinksRight }) %>
 
 <div class="invoice-shell py-4">
   <div class="container">
@@ -111,8 +119,8 @@
     </div>
 
     <div class="d-flex justify-content-between align-items-center d-print-none">
-      <a class="btn btn-outline-secondary" href="/orders/history">Back to orders</a>
-      <a class="btn btn-primary" href="/shopping">Continue shopping</a>
+      <a class="btn btn-outline-secondary" href="<%= isAdmin ? '/admin/orders' : '/orders/history' %>">Back</a>
+      <a class="btn btn-primary" href="<%= isAdmin ? '/inventory' : '/shopping' %>"><%= isAdmin ? 'Back to inventory' : 'Continue shopping' %></a>
     </div>
   </div>
 </div>
