@@ -1,3 +1,5 @@
+// General-purpose controller for rendering views and handling product-related operations.
+
 const express = require('express');
 const mysql = require('mysql2');
 const session = require('express-session');
@@ -101,7 +103,7 @@ app.get('/',  (req, res) => {
 
 // Inventory (admin) - uses controller to list products and render inventory view
 app.get('/inventory', checkAuthenticated, checkAdmin, (req, res) => {
-    // delegate to controller
+    // to call the list
     SupermarketController.list(req, res);
 });
 

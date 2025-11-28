@@ -1,3 +1,5 @@
+// Handles user registration, login, membership, and account management.
+
 const UserModel = require('../models/userModel');
 const OrderModel = require('../models/orderModel');
 
@@ -120,6 +122,7 @@ async function logout(req, res) {
   });
 }
 
+// Membership payment page
 function renderMembershipPayment(req, res) {
   const planKey = (req.query.plan || 'silver').toLowerCase();
   const confirm = req.query.confirm || '';
@@ -132,6 +135,7 @@ function renderMembershipPayment(req, res) {
   res.render('membershipPayment', { planKey: planKey, plan: selected, user: req.session.user, confirm });
 }
 
+// Process membership payment
 async function processMembershipPayment(req, res) {
   const plan = (req.body.plan || '').toLowerCase();
   const allowed = ['basic', 'silver', 'gold'];
@@ -157,6 +161,7 @@ async function processMembershipPayment(req, res) {
     }
   }
 
+  // Update user's membership plan
   try {
     await UserModel.update(userId, { plan });
     if (req.session.user) req.session.user.plan = plan;
@@ -181,6 +186,7 @@ async function listUsers(req, res) {
   }
 }
 
+// Render edit user page
 async function renderEditUser(req, res) {
   try {
     const targetUser = await UserModel.getById(req.params.id);
@@ -196,6 +202,7 @@ async function renderEditUser(req, res) {
   }
 }
 
+// Update user details
 async function updateUser(req, res) {
   const { username, email, address, contact, role, plan, disabled } = req.body;
   const userId = req.params.id;
@@ -229,12 +236,14 @@ async function updateUser(req, res) {
   }
 }
 
+// Delete user (not allowed)
 async function deleteUser(req, res) {
   const userId = req.params.id;
   req.flash('error', 'Deleting users is not allowed. Disable the account instead.');
   res.redirect('/admin/users');
 }
 
+// Toggle user disabled flag
 async function toggleDisable(req, res) {
   const userId = req.params.id;
   const disabled = req.body.disabled === '1';

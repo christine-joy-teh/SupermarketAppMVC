@@ -11,7 +11,13 @@ async function renderHome(req, res) {
       { id: 3, title: 'Bread & Bakery', subtitle: 'Daily fresh bread discounts', image: '/images/promo-bakery.jpg' }
     ];
     const bestsellers = await Product.getBestsellers(4);
-    res.render('index', { products, promotions, bestsellers });
+    res.render('index', {
+      products,
+      promotions,
+      bestsellers,
+      q: req.query.q || '',
+      sort: req.query.sort || ''
+    });
   } catch (err) {
     console.error('Error rendering home:', err.message);
     res.status(500).send('Error retrieving products');
@@ -22,7 +28,12 @@ async function renderShopping(req, res) {
   try {
     const products = await Product.list({ q: req.query.q, sort: req.query.sort });
     const bestsellers = (await Product.getBestsellers(4)).map(b => b.id);
-    res.render('shopping', { products, bestsellers });
+    res.render('shopping', {
+      products,
+      bestsellers,
+      q: req.query.q || '',
+      sort: req.query.sort || ''
+    });
   } catch (err) {
     console.error('Error rendering shopping:', err.message);
     res.status(500).send('Error retrieving products');

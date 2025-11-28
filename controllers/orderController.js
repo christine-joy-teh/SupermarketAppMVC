@@ -68,16 +68,21 @@ async function persistCart(user, items) {
 }
 
 async function renderCart(req, res) {
-  let cart = req.session.cart || [];
+  let cart = [];
   const membership = getMembershipBenefit(req.session.user);
 
   try {
-    if (!cart.length) {
-      const savedCart = await OrderModel.getCartByUserId(resolveUserId(req.session.user));
+    const userId = resolveUserId(req.session.user);
+    if (userId) {
+      const savedCart = await OrderModel.getCartByUserId(userId);
       if (Array.isArray(savedCart) && savedCart.length) {
         cart = savedCart;
         req.session.cart = savedCart;
+      } else {
+        cart = req.session.cart || [];
       }
+    } else {
+      cart = req.session.cart || [];
     }
 
     const cartWithStock = [];
@@ -130,8 +135,12 @@ async function addToCart(req, res) {
       return res.redirect('/shopping');
     }
 
-    if (!req.session.cart) {
-      req.session.cart = [];
+    // Always start from the latest saved cart so multiple browsers stay in sync
+    const userId = resolveUserId(req.session.user);
+    if (userId) {
+      req.session.cart = await OrderModel.getCartByUserId(userId) || [];
+    } else {
+      req.session.cart = req.session.cart || [];
     }
 
     const discount = Number(product.discountPercent) || 0;
@@ -171,6 +180,13 @@ async function updateCartItem(req, res) {
     return res.redirect('/cart');
   }
 
+  // Load latest cart from storage to avoid stale data across browsers
+  const userId = resolveUserId(req.session.user);
+  if (userId) {
+    req.session.cart = await OrderModel.getCartByUserId(userId) || [];
+  } else {
+    req.session.cart = req.session.cart || [];
+  }
   const cart = req.session.cart || [];
   const idx = cart.findIndex(item => Number(item.productId) === productId);
   if (idx === -1) {
@@ -213,6 +229,13 @@ async function deleteCartItem(req, res) {
   if (!Number.isFinite(productId)) {
     req.flash('error', 'Invalid product.');
     return res.redirect('/cart');
+  }
+  // Load latest cart from storage to avoid stale data across browsers
+  const userId = resolveUserId(req.session.user);
+  if (userId) {
+    req.session.cart = await OrderModel.getCartByUserId(userId) || [];
+  } else {
+    req.session.cart = req.session.cart || [];
   }
   const cart = req.session.cart || [];
   const nextCart = cart.filter(item => Number(item.productId) !== productId);
