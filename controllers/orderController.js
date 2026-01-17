@@ -1,12 +1,22 @@
 const OrderModel = require('../models/orderModel');
 const ProductModel = require('../models/productModel');
 const UserModel = require('../models/userModel');
+const RefundModel = require('../models/refundModel');
 
 // Promotion configuration (editable by admin at runtime)
 let promotionConfig = {
   keywords: ['milk', 'yogurt', 'cheese', 'butter', 'dairy'],
   percent: 10
 };
+
+const loyaltyConfig = {
+  earnRate: 10,
+  discountRate: 0.1,
+  maxRedemptionPercent: 50,
+  freeItem: { pointsCost: 100, value: 2 },
+  exclusivePromo: { pointsCost: 500, percent: 5 }
+};
+
 
 function getMembershipBenefit(user) {
   const planRaw = user && user.plan ? String(user.plan).toLowerCase() : '';
@@ -15,12 +25,62 @@ function getMembershipBenefit(user) {
   return { membershipPercent: 0, membershipPlan: planRaw || '' };
 }
 
+function getUserPoints(user) {
+  if (!user) return 0;
+  const raw = typeof user.loyalty_points !== 'undefined' ? user.loyalty_points : user.loyaltyPoints;
+  const points = Number(raw);
+  return Number.isFinite(points) ? points : 0;
+}
+
+function normalizeRedeemPoints(redeemPoints) {
+  const raw = Math.max(0, Math.floor(Number(redeemPoints) || 0));
+  return Math.floor(raw / 10) * 10;
+}
+
+function buildLoyaltyContext(user, redeemPoints) {
+  return {
+    user,
+    redeemPoints: normalizeRedeemPoints(redeemPoints),
+    pointsAvailable: getUserPoints(user)
+  };
+}
+
+function calculateLoyaltyRedemption(totalAfter, pointsAvailable, redeemPoints) {
+  const safeTotal = Math.max(Number(totalAfter) || 0, 0);
+  const points = Math.max(Math.floor(Number(pointsAvailable) || 0), 0);
+  const maxByPercentPoints = Math.floor(
+    (safeTotal * (loyaltyConfig.maxRedemptionPercent / 100)) / loyaltyConfig.discountRate
+  );
+  const maxAllowedPoints = Math.max(0, Math.min(points, maxByPercentPoints));
+  const maxAllowedTens = Math.floor(maxAllowedPoints / 10) * 10;
+  const desiredPoints = Math.min(normalizeRedeemPoints(redeemPoints), maxAllowedTens);
+  let savings = 0;
+  let pointsSpent = 0;
+  let rewardLabel = '';
+
+  if (desiredPoints > 0 && points > 0) {
+    const usablePoints = Math.min(points, desiredPoints);
+    const maxByPercent = safeTotal * (loyaltyConfig.maxRedemptionPercent / 100);
+    const maxByPoints = usablePoints * loyaltyConfig.discountRate;
+    savings = Math.min(maxByPercent, maxByPoints, safeTotal);
+    pointsSpent = Math.min(usablePoints, Math.floor(savings / loyaltyConfig.discountRate));
+    rewardLabel = 'Points discount';
+  }
+
+  return { pointsSpent, savings, rewardLabel, maxRedeemPoints: maxAllowedTens };
+}
+
+function calculateLoyaltyPointsEarned(amountPaid) {
+  const total = Math.max(Number(amountPaid) || 0, 0);
+  return Math.floor(total * loyaltyConfig.earnRate);
+}
+
 function resolveUserId(user) {
   if (!user) return null;
   return user.id || user.userId || user.user_id || user.userID || null;
 }
 
-function summarizeCart(cart = [], { membershipPercent = 0, membershipPlan = '' } = {}) {
+function summarizeCart(cart = [], { membershipPercent = 0, membershipPlan = '' } = {}, loyalty = {}) {
   let totalBefore = 0;
   let matchTotal = 0;
 
@@ -40,10 +100,16 @@ function summarizeCart(cart = [], { membershipPercent = 0, membershipPlan = '' }
   const membershipSavings = membershipPct > 0 ? (Math.max(totalBefore - promoSavings, 0) * (membershipPct / 100)) : 0;
 
   const totalAfter = Math.max(totalBefore - promoSavings - membershipSavings, 0);
-  const totalSavings = (promoSavings || 0) + (membershipSavings || 0);
-  return {
+  const pointsAvailable = typeof loyalty.pointsAvailable !== 'undefined'
+    ? Number(loyalty.pointsAvailable) || 0
+    : getUserPoints(loyalty.user);
+    const redemption = calculateLoyaltyRedemption(totalAfter, pointsAvailable, loyalty.redeemPoints);
+    const totalAfterLoyalty = Math.max(totalAfter - redemption.savings, 0);
+    const totalSavings = (promoSavings || 0) + (membershipSavings || 0) + (redemption.savings || 0);
+    const pointsEarned = calculateLoyaltyPointsEarned(totalAfterLoyalty);
+    return {
     totalBefore,
-    totalAfter,
+    totalAfter: totalAfterLoyalty,
     totalSavings,
     matchTotal,
     promo: { ...promotionConfig },
@@ -52,8 +118,80 @@ function summarizeCart(cart = [], { membershipPercent = 0, membershipPlan = '' }
       plan: membershipPlan,
       percent: membershipPct,
       savings: membershipSavings
+    },
+      loyalty: {
+        pointsAvailable,
+        rewardLabel: redemption.rewardLabel,
+        savings: redemption.savings || 0,
+        pointsSpent: redemption.pointsSpent || 0,
+        pointsEarned,
+        maxRedeemPoints: redemption.maxRedeemPoints || 0,
+        earnRate: loyaltyConfig.earnRate,
+        discountRate: loyaltyConfig.discountRate,
+        maxRedemptionPercent: loyaltyConfig.maxRedemptionPercent
+      }
+    };
+}
+
+async function validateCart(cart = []) {
+  if (!Array.isArray(cart) || cart.length === 0) {
+    return { ok: false, message: 'Your cart is empty.' };
+  }
+
+  for (const item of cart) {
+    const product = await ProductModel.getById(item.productId);
+    if (!product) {
+      return { ok: false, message: `Product not found (id ${item.productId}).` };
     }
-  };
+    const desiredQty = Number(item.quantity) || 0;
+    if (desiredQty <= 0) {
+      return { ok: false, message: 'Quantity must be greater than zero.' };
+    }
+    if (Number(product.quantity) < desiredQty) {
+      return { ok: false, message: `Not enough stock for ${product.productName}. Available: ${product.quantity}.` };
+    }
+  }
+
+  return { ok: true };
+}
+
+async function placeOrderFromCart({
+  cart,
+  user,
+  summary,
+  status = 'processing',
+  deliveryMethod = 'delivery',
+  deliveryAddress = null,
+  pickupOutlet = null,
+  paymentMethod = null,
+  paymentRef = null
+}) {
+  const orderRecord = await OrderModel.createOrder({
+    userId: resolveUserId(user),
+    subtotal: summary.totalBefore,
+    total: summary.totalAfter,
+    savings: summary.totalSavings,
+    status,
+    cartItems: cart,
+    deliveryMethod,
+    deliveryAddress,
+    pickupOutlet,
+    paymentMethod,
+    paymentRef
+  });
+
+  for (const item of cart) {
+    await ProductModel.reduceStock(item.productId, item.quantity);
+  }
+
+  try {
+    const userId = resolveUserId(user);
+    if (userId) await OrderModel.saveCart(userId, []);
+  } catch (persistErr) {
+    console.error('Unable to clear saved cart after checkout:', persistErr.message);
+  }
+
+  return orderRecord;
 }
 
 async function persistCart(user, items) {
@@ -67,7 +205,7 @@ async function persistCart(user, items) {
   }
 }
 
-async function renderCart(req, res) {
+async function buildCartViewData(req) {
   let cart = [];
   const membership = getMembershipBenefit(req.session.user);
 
@@ -104,14 +242,50 @@ async function renderCart(req, res) {
       });
     }
 
-    const summary = summarizeCart(cartWithStock, membership);
-    return res.render('cart', { cart: cartWithStock, summary, hasStockIssue });
+    const loyalty = buildLoyaltyContext(req.session.user, req.session.loyaltyRedeemPoints);
+    const summary = summarizeCart(cartWithStock, membership, loyalty);
+    return { cart: cartWithStock, summary, hasStockIssue };
   } catch (err) {
     console.error('Error loading cart:', err.message);
     req.flash('error', 'Unable to load cart right now.');
-    const summary = summarizeCart(cart, membership);
-    return res.render('cart', { cart, summary, hasStockIssue: false });
+    const loyalty = buildLoyaltyContext(req.session.user, req.session.loyaltyRedeemPoints);
+    const summary = summarizeCart(cart, membership, loyalty);
+    return { cart, summary, hasStockIssue: false };
   }
+}
+
+async function updateLoyaltyRedemption(req, res) {
+  try {
+    const userId = resolveUserId(req.session.user);
+    if (userId) {
+      const savedCart = await OrderModel.getCartByUserId(userId);
+      if (Array.isArray(savedCart) && savedCart.length) {
+        req.session.cart = savedCart;
+      }
+    }
+  } catch (err) {
+    console.error('Unable to load cart for loyalty update:', err.message);
+  }
+
+  const cart = req.session.cart || [];
+  const membership = getMembershipBenefit(req.session.user);
+  const requestedPoints = req.body && typeof req.body.loyaltyRedeemPointsInput !== 'undefined'
+    ? req.body.loyaltyRedeemPointsInput
+    : 0;
+  const loyalty = buildLoyaltyContext(req.session.user, requestedPoints);
+  const summary = summarizeCart(cart, membership, loyalty);
+  req.session.loyaltyRedeemPoints = summary.loyalty.pointsSpent || 0;
+  return res.redirect('/payment');
+}
+
+async function renderCart(req, res) {
+  const data = await buildCartViewData(req);
+  return res.render('cart', { ...data, paypalClientId: process.env.PAYPAL_CLIENT_ID });
+}
+
+async function renderPayment(req, res) {
+  const data = await buildCartViewData(req);
+  return res.render('payment', { ...data, paypalClientId: process.env.PAYPAL_CLIENT_ID });
 }
 
 async function addToCart(req, res) {
@@ -251,11 +425,6 @@ async function deleteCartItem(req, res) {
 
 async function checkout(req, res) {
   const cart = req.session.cart || [];
-  if (!cart.length) {
-    req.flash('error', 'Your cart is empty.');
-    return res.redirect('/cart');
-  }
-
   // Basic payment validation
   const { cardName = '', cardNumber = '', expiry = '', cvv = '' } = req.body || {};
   const deliveryAddress = (req.body && req.body.deliveryAddress) ? String(req.body.deliveryAddress).trim() : '';
@@ -270,58 +439,37 @@ async function checkout(req, res) {
   }
 
   const membershipInfo = getMembershipBenefit(req.session.user);
-  const summary = summarizeCart(cart, membershipInfo);
   try {
-    // Validate stock before placing order
-    for (const item of cart) {
-      const product = await ProductModel.getById(item.productId);
-      if (!product) {
-        req.flash('error', `Product not found (id ${item.productId}).`);
-        return res.redirect('/cart');
-      }
-      const desiredQty = Number(item.quantity) || 0;
-      if (desiredQty <= 0) {
-        req.flash('error', 'Quantity must be greater than zero.');
-        return res.redirect('/cart');
-      }
-      if (Number(product.quantity) < desiredQty) {
-        req.flash('error', `Not enough stock for ${product.productName}. Available: ${product.quantity}.`);
-        return res.redirect('/cart');
-      }
+    const validation = await validateCart(cart);
+    if (!validation.ok) {
+      req.flash('error', validation.message);
+      return res.redirect('/cart');
     }
 
+    const summary = summarizeCart(cart, membershipInfo);
     const deliveryMethod = req.body && req.body.deliveryMethod ? String(req.body.deliveryMethod) : 'delivery';
-    const orderRecord = await OrderModel.createOrder({
-      userId: resolveUserId(req.session.user),
-      subtotal: summary.totalBefore,
-      total: summary.totalAfter,
-      savings: summary.totalSavings,
+    const orderRecord = await placeOrderFromCart({
+      cart,
+      user: req.session.user,
+      summary,
       status: 'processing',
-      cartItems: cart,
       deliveryMethod,
       deliveryAddress: deliveryAddress || null,
-      pickupOutlet: deliveryMethod === 'pickup' ? (pickupOutlet || null) : null
+      pickupOutlet: deliveryMethod === 'pickup' ? (pickupOutlet || null) : null,
+      paymentMethod: 'card'
     });
 
-    // Reduce stock after successful order creation
-    for (const item of cart) {
-      await ProductModel.reduceStock(item.productId, item.quantity);
-    }
-
     req.session.cart = [];
-    try {
-      const userId = resolveUserId(req.session.user);
-      if (userId) await OrderModel.saveCart(userId, []);
-    } catch (persistErr) {
-      console.error('Unable to clear saved cart after checkout:', persistErr.message);
-    }
     let savingsMsg = '';
     if (summary.totalSavings > 0) {
       const promoPart = summary.promoSavings > 0 ? `promo $${summary.promoSavings.toFixed(2)}` : '';
       const memberPart = summary.membership && summary.membership.savings > 0
         ? `membership $${summary.membership.savings.toFixed(2)}`
         : '';
-      const parts = [promoPart, memberPart].filter(Boolean).join(' + ');
+      const loyaltyPart = summary.loyalty && summary.loyalty.savings > 0
+        ? `loyalty $${summary.loyalty.savings.toFixed(2)}`
+        : '';
+      const parts = [promoPart, memberPart, loyaltyPart].filter(Boolean).join(' + ');
       savingsMsg = ` (you saved $${summary.totalSavings.toFixed(2)}${parts ? `: ${parts}` : ''})`;
     }
     req.flash('success', `Order #${orderRecord.id} placed! Total: $${summary.totalAfter.toFixed(2)}${savingsMsg}`);
@@ -366,7 +514,12 @@ async function renderUserOrders(req, res) {
   try {
     const userId = resolveUserId(req.session.user);
     const orders = await OrderModel.getOrdersByUser(userId);
-    res.render('ordersHistory', { orders, user: req.session.user });
+    const refunds = await RefundModel.getByUserId(userId);
+    const refundsMap = refunds.reduce((acc, refund) => {
+      if (!acc[refund.orderId]) acc[refund.orderId] = refund;
+      return acc;
+    }, {});
+    res.render('ordersHistory', { orders, refundsMap, user: req.session.user });
   } catch (err) {
     console.error('Error fetching user orders:', err.message);
     req.flash('error', 'Unable to load your orders right now.');
@@ -512,7 +665,11 @@ module.exports = {
   list,
   detail,
   summarizeCart,
+  validateCart,
+  placeOrderFromCart,
   renderCart,
+  renderPayment,
+  buildCartViewData,
   addToCart,
   updateCartItem,
   deleteCartItem,
@@ -524,6 +681,12 @@ module.exports = {
   remove,
   renderPromotion,
   updatePromotion,
+  updateLoyaltyRedemption,
+  buildLoyaltyContext,
+  calculateLoyaltyPointsEarned,
+  getUserPoints,
+  normalizeRedeemPoints,
+  resolveUserId,
   get promotionConfig() { return promotionConfig; },
   getMembershipBenefit
 };

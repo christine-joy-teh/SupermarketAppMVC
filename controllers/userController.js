@@ -30,6 +30,15 @@ function renderRegister(req, res) {
   res.render('register', { messages: req.flash('error'), formData: {}, plan });
 }
 
+function renderLoyalty(req, res) {
+  const user = req.session.user || null;
+  const pointsValue = Number(
+    user && (typeof user.loyalty_points !== 'undefined' ? user.loyalty_points : user.loyaltyPoints)
+  );
+  const points = Number.isFinite(pointsValue) ? pointsValue : 0;
+  res.render('loyalty', { user, points });
+}
+
 async function register(req, res) {
   const { username, email, password, address, contact } = req.body;
   const plan = 'basic'; // new accounts start on basic by default
@@ -78,6 +87,9 @@ async function login(req, res) {
     }
 
     req.session.user = user;
+    if (typeof req.session.user.loyalty_points === 'undefined' && typeof req.session.user.loyaltyPoints === 'undefined') {
+      req.session.user.loyalty_points = 0;
+    }
     try {
       const savedCart = await OrderModel.getCartByUserId(resolveUserId(req.session.user));
       if (Array.isArray(savedCart) && savedCart.length) {
@@ -204,7 +216,7 @@ async function renderEditUser(req, res) {
 
 // Update user details
 async function updateUser(req, res) {
-  const { username, email, address, contact, role, plan, disabled } = req.body;
+  const { username, email, address, contact, role, plan, disabled, loyaltyPoints } = req.body;
   const userId = req.params.id;
 
   if (!username || !email || !role || !isValidEmail(email) || !isValidRole(role) || !isValidPlan(plan || '')) {
@@ -213,6 +225,7 @@ async function updateUser(req, res) {
   }
 
   try {
+    const parsedPoints = typeof loyaltyPoints !== 'undefined' ? Number(loyaltyPoints) : undefined;
     const result = await UserModel.update(userId, {
       username,
       email,
@@ -220,7 +233,8 @@ async function updateUser(req, res) {
       contact: contact || '',
       role,
       plan: plan || null,
-      disabled: disabled === '1'
+      disabled: disabled === '1',
+      loyaltyPoints: Number.isFinite(parsedPoints) ? parsedPoints : undefined
     });
 
     if (result && result.affectedRows === 0) {
@@ -260,6 +274,7 @@ async function toggleDisable(req, res) {
 module.exports = {
   renderLogin,
   renderRegister,
+  renderLoyalty,
   register,
   login,
   logout,
