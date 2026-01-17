@@ -1,14 +1,21 @@
-const db = require('../config/db');
+const rawDb = require('../db');
+const db = rawDb.promise ? rawDb.promise() : rawDb;
+
+function getDbName() {
+  return (
+    (rawDb.config && rawDb.config.connectionConfig && rawDb.config.connectionConfig.database) ||
+    (rawDb.config && rawDb.config.database) ||
+    process.env.DB_NAME
+  );
+}
 
 // Admin-facing user helpers
 let planColumnReady;
 let disabledColumnReady;
+let loyaltyColumnReady;
 
 async function ensurePlanColumn() {
-  const dbName =
-    (db.config && db.config.connectionConfig && db.config.connectionConfig.database) ||
-    (db.config && db.config.database) ||
-    process.env.DB_NAME;
+  const dbName = getDbName();
 
   try {
     const [exists] = await db.query(
@@ -48,10 +55,7 @@ async function hasPlanColumn() {
 }
 
 async function ensureDisabledColumn() {
-  const dbName =
-    (db.config && db.config.connectionConfig && db.config.connectionConfig.database) ||
-    (db.config && db.config.database) ||
-    process.env.DB_NAME;
+  const dbName = getDbName();
   try {
     const [exists] = await db.query(
       "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND COLUMN_NAME = 'disabled'",
@@ -78,12 +82,53 @@ async function hasDisabledColumn() {
   return disabledColumnReady;
 }
 
+async function ensureLoyaltyPointsColumn() {
+  const dbName = getDbName();
+
+  try {
+    const [exists] = await db.query(
+      "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND COLUMN_NAME = 'loyalty_points'",
+      [dbName]
+    );
+    if (exists.length) return true;
+  } catch (err) {
+    console.warn('Loyalty points column check failed:', err.message);
+  }
+
+  try {
+    await db.query('ALTER TABLE users ADD COLUMN loyalty_points INT NOT NULL DEFAULT 0');
+  } catch (err) {
+    if (err.code !== 'ER_DUP_FIELDNAME') {
+      console.warn('Loyalty points column migration skipped:', err.message);
+    }
+  }
+
+  try {
+    const [rows] = await db.query(
+      "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND COLUMN_NAME = 'loyalty_points'",
+      [dbName]
+    );
+    return rows.length > 0;
+  } catch (err) {
+    console.warn('Loyalty points column final check failed:', err.message);
+    return false;
+  }
+}
+
+async function hasLoyaltyPointsColumn() {
+  if (!loyaltyColumnReady) {
+    loyaltyColumnReady = ensureLoyaltyPointsColumn();
+  }
+  return loyaltyColumnReady;
+}
+
 async function list() {
   // Prefer selecting plan; if column is missing, fall back gracefully.
-  const fieldsWithPlan = 'id, username, email, address, contact, role, plan, disabled';
+  const fieldsWithPlan = 'id, username, email, address, contact, role, plan, loyalty_points, disabled';
   const fieldsWithoutPlan = 'id, username, email, address, contact, role';
   try {
     await hasPlanColumn();
+    await hasLoyaltyPointsColumn();
     await hasDisabledColumn();
     const [rows] = await db.query(`SELECT ${fieldsWithPlan} FROM users ORDER BY id DESC`);
     return rows;
@@ -95,10 +140,11 @@ async function list() {
 }
 
 async function getById(id) {
-  const fieldsWithPlan = 'id, username, email, address, contact, role, plan, disabled';
+  const fieldsWithPlan = 'id, username, email, address, contact, role, plan, loyalty_points, disabled';
   const fieldsWithoutPlan = 'id, username, email, address, contact, role';
   try {
     await hasPlanColumn();
+    await hasLoyaltyPointsColumn();
     await hasDisabledColumn();
     const [rows] = await db.query(`SELECT ${fieldsWithPlan} FROM users WHERE id = ?`, [id]);
     return rows[0] || null;
@@ -109,7 +155,7 @@ async function getById(id) {
   }
 }
 
-async function update(id, { username, email, address, contact, role, plan, disabled }) {
+async function update(id, { username, email, address, contact, role, plan, disabled, loyaltyPoints }) {
   const setters = [];
   const params = [];
 
@@ -145,6 +191,19 @@ async function update(id, { username, email, address, contact, role, plan, disab
       // column missing; skip plan silently
     }
   }
+  if (typeof loyaltyPoints !== 'undefined') {
+    try {
+      await hasLoyaltyPointsColumn();
+      const cleanPoints = Math.max(0, Math.floor(Number(loyaltyPoints) || 0));
+      setters.push('loyalty_points = ?');
+      params.push(cleanPoints);
+    } catch (err) {
+      if (err.code !== 'ER_BAD_FIELD_ERROR') {
+        throw err;
+      }
+      // column missing; skip loyalty_points silently
+    }
+  }
   if (typeof disabled !== 'undefined') {
     try {
       await hasDisabledColumn();
@@ -167,7 +226,7 @@ async function update(id, { username, email, address, contact, role, plan, disab
   } catch (err) {
     // If plan column missing and we attempted to set it, retry without plan
     if (err.code === 'ER_BAD_FIELD_ERROR') {
-      const filteredSetters = setters.filter(s => !s.startsWith('plan ='));
+      const filteredSetters = setters.filter(s => !s.startsWith('plan =') && !s.startsWith('loyalty_points ='));
       const filteredParams = params.slice(0, filteredSetters.length);
       filteredParams.push(id);
       const [result] = await db.query(`UPDATE users SET ${filteredSetters.join(', ')} WHERE id = ?`, filteredParams);
@@ -216,6 +275,38 @@ async function authenticate(email, password) {
   return rows[0] || null;
 }
 
+async function adjustLoyaltyPoints(id, delta) {
+  const cleanDelta = Math.floor(Number(delta) || 0);
+  if (!Number.isFinite(cleanDelta) || cleanDelta === 0) {
+    return { affectedRows: 0 };
+  }
+  try {
+    await hasLoyaltyPointsColumn();
+    const [result] = await db.query(
+      'UPDATE users SET loyalty_points = GREATEST(0, COALESCE(loyalty_points, 0) + ?) WHERE id = ?',
+      [cleanDelta, id]
+    );
+    return result;
+  } catch (err) {
+    if (err.code === 'ER_BAD_FIELD_ERROR') {
+      return { affectedRows: 0 };
+    }
+    throw err;
+  }
+}
+
+async function getLoyaltyPointsById(id) {
+  try {
+    await hasLoyaltyPointsColumn();
+    const [rows] = await db.query('SELECT loyalty_points FROM users WHERE id = ?', [id]);
+    if (!rows.length) return 0;
+    return Number(rows[0].loyalty_points) || 0;
+  } catch (err) {
+    if (err.code === 'ER_BAD_FIELD_ERROR') return 0;
+    throw err;
+  }
+}
+
 module.exports = {
   list,
   getById,
@@ -223,5 +314,7 @@ module.exports = {
   remove,
   findByEmail,
   create,
-  authenticate
+  authenticate,
+  adjustLoyaltyPoints,
+  getLoyaltyPointsById
 };

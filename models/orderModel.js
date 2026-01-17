@@ -1,4 +1,5 @@
-const db = require('../config/db');
+const rawDb = require('../db');
+const db = rawDb.promise ? rawDb.promise() : rawDb;
 
 let columnCache;
 
@@ -12,6 +13,14 @@ const tableReady = ensureOrdersTable().then(cols => {
 const cartTableReady = ensureCartTable().catch(err => {
   console.error('Failed to ensure user_carts table:', err.message);
 });
+
+function getDbName() {
+  return (
+    (rawDb.config && rawDb.config.connectionConfig && rawDb.config.connectionConfig.database) ||
+    (rawDb.config && rawDb.config.database) ||
+    process.env.DB_NAME
+  );
+}
 
 async function ensureOrdersTable() {
   await db.query(`
@@ -28,10 +37,7 @@ async function ensureOrdersTable() {
   `);
 
   // Ensure required columns exist (for older tables)
-  const dbName =
-    (db.config && db.config.connectionConfig && db.config.connectionConfig.database) ||
-    (db.config && db.config.database) ||
-    process.env.DB_NAME;
+  const dbName = getDbName();
 
   async function ensureColumn(column, ddl) {
     const [rows] = await db.query(
@@ -60,6 +66,8 @@ async function ensureOrdersTable() {
   await ensureColumn('deliveryMethod', "deliveryMethod VARCHAR(50) DEFAULT 'delivery'");
   await ensureColumn('deliveryAddress', "deliveryAddress VARCHAR(255) DEFAULT NULL");
   await ensureColumn('pickupOutlet', "pickupOutlet VARCHAR(255) DEFAULT NULL");
+  await ensureColumn('paymentMethod', "paymentMethod VARCHAR(50) DEFAULT NULL");
+  await ensureColumn('paymentRef', "paymentRef VARCHAR(255) DEFAULT NULL");
 
   // Loosen existing columns that might be NOT NULL without defaults
   try {
@@ -120,13 +128,25 @@ function mapOrderRow(row) {
   return { ...row, userId, items };
 }
 
-async function createOrder({ userId, subtotal, total, savings, status = 'processing', cartItems = [], deliveryMethod = 'delivery', deliveryAddress = null, pickupOutlet = null }) {
+async function createOrder({
+  userId,
+  subtotal,
+  total,
+  savings,
+  status = 'processing',
+  cartItems = [],
+  deliveryMethod = 'delivery',
+  deliveryAddress = null,
+  pickupOutlet = null,
+  paymentMethod = null,
+  paymentRef = null
+}) {
   await tableReady;
   const normalizedItems = sanitizeCartItems(cartItems);
   // Always write to both userId and user_id (both columns are created in ensureOrdersTable)
   const sql = `
-    INSERT INTO orders (userId, user_id, subtotal, total, savings, status, itemsJson, deliveryMethod, deliveryAddress, pickupOutlet)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO orders (userId, user_id, subtotal, total, savings, status, itemsJson, deliveryMethod, deliveryAddress, pickupOutlet, paymentMethod, paymentRef)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
   const params = [
     userId || null,
@@ -138,7 +158,9 @@ async function createOrder({ userId, subtotal, total, savings, status = 'process
     JSON.stringify(normalizedItems),
     deliveryMethod || 'delivery',
     deliveryAddress || null,
-    pickupOutlet || null
+    pickupOutlet || null,
+    paymentMethod || null,
+    paymentRef || null
   ];
 
   const [result] = await db.query(sql, params);
@@ -152,7 +174,9 @@ async function createOrder({ userId, subtotal, total, savings, status = 'process
     items: normalizedItems,
     deliveryMethod,
     deliveryAddress,
-    pickupOutlet
+    pickupOutlet,
+    paymentMethod,
+    paymentRef
   };
 }
 
