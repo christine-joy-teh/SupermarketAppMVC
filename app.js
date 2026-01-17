@@ -1,10 +1,15 @@
+require('dotenv').config();
 const express = require('express');
 const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
 const session = require('express-session');
 const flash = require('connect-flash');
 const productController = require('./controllers/productController');
 const orderController = require('./controllers/orderController');
 const userController = require('./controllers/userController');
+const paymentController = require('./controllers/paymentController');
+const refundController = require('./controllers/refundController');
 
 const { attachSessionLocals, checkAuthenticated, checkAdmin } = require('./middleware');
 const app = express();
@@ -21,12 +26,27 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
+const refundDir = path.join(__dirname, 'public', 'refunds');
+fs.mkdirSync(refundDir, { recursive: true });
+const refundStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, refundDir);
+    },
+    filename: (req, file, cb) => {
+        const safeName = `${Date.now()}-${file.originalname}`;
+        cb(null, safeName);
+    }
+});
+const refundUpload = multer({ storage: refundStorage });
+
 // Set up view engine
 app.set('view engine', 'ejs');
 // Enable static files
 app.use(express.static('public'));
 // Enable form processing
 app.use(express.urlencoded({ extended: false }));
+// Enable JSON payloads (PayPal callbacks)
+app.use(express.json());
 
 // Session middleware
 app.use(session({
@@ -52,6 +72,9 @@ app.get('/login', (req, res) => userController.renderLogin(req, res));
 // GET route for registration page
 app.get('/register', (req, res) => userController.renderRegister(req, res));
 
+// Loyalty points page
+app.get('/loyalty', checkAuthenticated, (req, res) => userController.renderLoyalty(req, res));
+
 // Membership payment landing (select plan and proceed)
 app.get('/membership/payment', (req, res) => userController.renderMembershipPayment(req, res));
 
@@ -66,6 +89,8 @@ app.get('/orders/:id', checkAuthenticated, (req, res) => orderController.detail(
 app.get('/admin/orders', checkAuthenticated, checkAdmin, (req, res) => orderController.renderAdminOrders(req, res));
 app.post('/admin/orders/:id/status', checkAuthenticated, checkAdmin, (req, res) => orderController.updateStatus(req, res));
 app.post('/admin/orders/:id/delete', checkAuthenticated, checkAdmin, (req, res) => orderController.remove(req, res));
+app.get('/refunds/new', checkAuthenticated, (req, res) => refundController.renderRefundRequest(req, res));
+app.post('/refunds', checkAuthenticated, refundUpload.single('document'), (req, res) => refundController.submitRefundRequest(req, res));
 
 // POST route to handle registration
 app.post('/register', (req, res) => userController.register(req, res));
@@ -130,12 +155,19 @@ app.post('/admin/users/:id/disable', checkAuthenticated, checkAdmin, (req, res) 
     userController.toggleDisable(req, res);
 });
 
+// Admin refunds
+app.get('/admin/refunds', checkAuthenticated, checkAdmin, (req, res) => refundController.renderAdminRefunds(req, res));
+app.post('/admin/refunds/:id/approve', checkAuthenticated, checkAdmin, (req, res) => refundController.approveRefund(req, res));
+app.post('/admin/refunds/:id/deny', checkAuthenticated, checkAdmin, (req, res) => refundController.denyRefund(req, res));
+
 // Admin promotion management
 app.get('/admin/promotion', checkAuthenticated, checkAdmin, (req, res) => orderController.renderPromotion(req, res));
 app.post('/admin/promotion', checkAuthenticated, checkAdmin, (req, res) => orderController.updatePromotion(req, res));
 
 // Cart route - Displays the cart
 app.get('/cart', checkAuthenticated, (req, res) => orderController.renderCart(req, res));
+app.get('/payment', checkAuthenticated, (req, res) => orderController.renderPayment(req, res));
+app.post('/payment/loyalty', checkAuthenticated, (req, res) => orderController.updateLoyaltyRedemption(req, res));
 
 // Add to cart route
 app.post('/add-to-cart/:id', checkAuthenticated, (req, res) => orderController.addToCart(req, res));
@@ -148,6 +180,20 @@ app.post('/cart/item/:id/delete', checkAuthenticated, (req, res) => orderControl
 
 // Checkout route now handled by OrderController (persists the order)
 app.post('/checkout', checkAuthenticated, (req, res) => orderController.checkout(req, res));
+
+// PayPal routes
+app.post('/paypal/create-order', checkAuthenticated, (req, res) => paymentController.createPaypalOrder(req, res));
+app.post('/paypal/capture-order', checkAuthenticated, (req, res) => paymentController.capturePaypalOrder(req, res));
+app.post('/nets/qr', checkAuthenticated, (req, res) => paymentController.generateNetsQrCode(req, res));
+app.post('/nets/confirm', checkAuthenticated, (req, res) => paymentController.confirmNetsPayment(req, res));
+app.get('/nets-qr/fail', checkAuthenticated, async (req, res) => {
+    res.render('netsQrFail', {
+        title: 'Transaction Failed',
+        responseCode: 'N.A.',
+        instructions: '',
+        errorMsg: 'Transaction timed out. Please try again.'
+    });
+});
 
 
 // Logout route - Destroy session and log the user out

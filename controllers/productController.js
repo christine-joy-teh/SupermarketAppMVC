@@ -69,7 +69,7 @@ async function create(req, res) {
   try {
     const { name, quantity, price, discountPercent } = req.body;
     const image = req.file ? req.file.filename : null;
-    const discount = Math.max(0, Math.min(100, Number(discountPercent) || 0));
+    const discount = Math.max(0, Math.min(50, Number(discountPercent) || 0));
     await Product.create({ name, quantity, price, image, discountPercent: discount });
     req.flash('success', 'Product added');
     res.redirect('/inventory');
@@ -104,7 +104,7 @@ async function update(req, res) {
     }
 
     const image = req.file ? req.file.filename : currentImage;
-    const discount = Math.max(0, Math.min(100, Number(discountPercent) || 0));
+    const discount = Math.max(0, Math.min(50, Number(discountPercent) || 0));
     const result = await Product.update(productId, { name, quantity: qty, price, image, discountPercent: discount });
 
     if (result && result.affectedRows === 0) {

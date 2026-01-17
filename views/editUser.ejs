@@ -4,6 +4,7 @@
     { href: '/inventory', label: 'Inventory' },
     { href: '/addProduct', label: 'Add Product' },
     { href: '/admin/orders', label: 'Orders' },
+    { href: '/admin/refunds', label: 'Refunds' },
     { href: '/admin/users', label: 'Users', active: true },
     { href: '/admin/promotion', label: 'Promotion' }
   ],
@@ -47,6 +48,11 @@
           <option value="gold" <%= targetUser.plan === 'gold' ? 'selected' : '' %>>Gold</option>
         </select>
         <small class="text-muted">Choose a membership for this user.</small>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="loyaltyPoints">Loyalty points</label>
+        <input id="loyaltyPoints" name="loyaltyPoints" type="number" min="0" class="form-control" value="<%= typeof targetUser.loyalty_points !== 'undefined' ? targetUser.loyalty_points : 0 %>">
+        <small class="text-muted">Adjust the user's points balance.</small>
       </div>
       <div class="form-check mb-3">
         <input class="form-check-input" type="checkbox" value="1" id="disabled" name="disabled" <%= targetUser.disabled ? 'checked' : '' %>>

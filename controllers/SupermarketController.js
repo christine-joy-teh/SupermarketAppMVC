@@ -1,5 +1,6 @@
 // General-purpose controller for rendering views and handling product-related operations.
 
+// Import required modules
 const express = require('express');
 const mysql = require('mysql2');
 const session = require('express-session');

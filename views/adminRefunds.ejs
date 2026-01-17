@@ -1,0 +1,93 @@
+<%- include('partials/head', { pageTitle: 'Refund Requests - Supermarket App' }) %>
+<%- include('partials/navbar', {
+  navLinksLeft: [
+    { href: '/inventory', label: 'Inventory' },
+    { href: '/addProduct', label: 'Add Product' },
+    { href: '/admin/orders', label: 'Orders' },
+    { href: '/admin/refunds', label: 'Refunds', active: true },
+    { href: '/admin/users', label: 'Users' },
+    { href: '/admin/promotion', label: 'Promotion' }
+  ],
+  navLinksRight: [
+    { href: '/logout', label: 'Logout' }
+  ]
+}) %>
+
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <p class="text-uppercase text-muted small mb-1">Admin</p>
+      <h3 class="mb-0">Refund Requests</h3>
+      <small class="text-muted">Approve or deny customer refunds</small>
+    </div>
+  </div>
+
+  <% if (success && success.length) { %>
+    <div class="alert alert-success"><%= success[0] %></div>
+  <% } %>
+  <% if (error && error.length) { %>
+    <div class="alert alert-danger"><%= error[0] %></div>
+  <% } %>
+
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Order</th>
+          <th>User</th>
+          <th>Amount</th>
+          <th>Reason</th>
+          <th>Document</th>
+          <th>Status</th>
+          <th class="text-center">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% if (refunds && refunds.length) { %>
+          <% refunds.forEach(r => { %>
+            <tr>
+              <td>#<%= r.id %></td>
+              <td>#<%= r.orderId %></td>
+              <td>
+                <div class="d-flex flex-column">
+                  <span class="fw-semibold"><%= r.userName || 'Unknown user' %></span>
+                  <small class="text-muted"><%= r.userEmail || 'No email' %></small>
+                </div>
+              </td>
+              <td>$<%= Number(r.orderTotal || 0).toFixed(2) %></td>
+              <td style="max-width: 240px;"><%= r.reason %></td>
+              <td>
+                <% if (r.documentPath) { %>
+                  <a class="btn btn-sm btn-outline-secondary" href="<%= r.documentPath %>" target="_blank">View</a>
+                <% } else { %>
+                  <span class="text-muted">None</span>
+                <% } %>
+              </td>
+              <td><span class="badge bg-secondary text-uppercase"><%= r.status %></span></td>
+              <td class="text-center">
+                <% if (r.status === 'pending') { %>
+                  <form action="/admin/refunds/<%= r.id %>/approve" method="POST" class="d-flex gap-2 justify-content-center mb-2">
+                    <input type="text" name="adminNote" class="form-control form-control-sm" placeholder="Note (optional)" style="max-width: 160px;">
+                    <button class="btn btn-sm btn-success" type="submit">Approve</button>
+                  </form>
+                  <form action="/admin/refunds/<%= r.id %>/deny" method="POST" class="d-flex gap-2 justify-content-center">
+                    <input type="text" name="adminNote" class="form-control form-control-sm" placeholder="Reason" style="max-width: 160px;">
+                    <button class="btn btn-sm btn-outline-danger" type="submit">Deny</button>
+                  </form>
+                <% } else { %>
+                  <small class="text-muted"><%= r.adminNote || 'No notes' %></small>
+                <% } %>
+              </td>
+            </tr>
+          <% }) %>
+        <% } else { %>
+          <tr>
+            <td colspan="8" class="text-center text-muted">No refund requests found.</td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</div>
+<%- include('partials/footer') %>

@@ -4,6 +4,7 @@
     { href: '/inventory', label: 'Inventory' },
     { href: '/addProduct', label: 'Add New Product', active: true },
     { href: '/admin/orders', label: 'Orders' },
+    { href: '/admin/refunds', label: 'Refunds' },
     { href: '/admin/users', label: 'Users' },
     { href: '/admin/promotion', label: 'Promotion' }
   ],
@@ -34,7 +35,7 @@
 
       <div class="mb-3">
         <label for="discountPercent" class="form-label">Discount (%)</label>
-        <input type="number" class="form-control" id="discountPercent" name="discountPercent" min="0" max="100" step="0.1" value="0">
+        <input type="number" class="form-control" id="discountPercent" name="discountPercent" min="0" max="50" step="0.1" value="0">
         <small class="text-muted">Optional percent off; shown as slashed price.</small>
       </div>
 

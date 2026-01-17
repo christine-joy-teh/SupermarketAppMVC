@@ -1,0 +1,49 @@
+<%- include('partials/head', { pageTitle: 'Request Refund - Supermarket App' }) %>
+<%- include('partials/navbar', {
+  navLinksRight: [
+    { href: '/shopping', label: 'Shop' },
+    { href: '/cart', label: 'Cart', badgeValue: cartCount, badgeClass: 'bg-primary' },
+    { href: '/orders/history', label: 'My Orders', active: true },
+    { href: '/logout', label: 'Logout' }
+  ]
+}) %>
+
+<div class="container py-4" style="max-width: 720px;">
+  <h3 class="mb-3">Request refund</h3>
+
+  <% if (success && success.length) { %>
+    <div class="alert alert-success"><%= success[0] %></div>
+  <% } %>
+  <% if (error && error.length) { %>
+    <div class="alert alert-danger"><%= error[0] %></div>
+  <% } %>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <h6 class="text-uppercase text-muted small mb-2">Order summary</h6>
+      <div class="d-flex justify-content-between">
+        <span>Order #<%= order.id %></span>
+        <span class="fw-semibold">$<%= Number(order.total || 0).toFixed(2) %></span>
+      </div>
+      <div class="text-muted small">Placed: <%= order.createdAt ? new Date(order.createdAt).toLocaleString() : 'n/a' %></div>
+    </div>
+  </div>
+
+  <form action="/refunds" method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="orderId" value="<%= order.id %>">
+    <div class="mb-3">
+      <label class="form-label">Reason for refund</label>
+      <textarea name="reason" class="form-control" rows="4" required placeholder="Describe the issue and what went wrong."></textarea>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Attach document (optional)</label>
+      <input type="file" name="document" class="form-control" accept=".jpg,.jpeg,.png,.pdf">
+      <small class="text-muted">Receipts or photos help speed up the review.</small>
+    </div>
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-primary">Submit request</button>
+      <a href="/orders/history" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+<%- include('partials/footer') %>

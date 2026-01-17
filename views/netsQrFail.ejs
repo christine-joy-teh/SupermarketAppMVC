@@ -1,0 +1,21 @@
+<%- include('partials/head', { pageTitle: 'NETS QR Error - Supermarket App' }) %>
+<%- include('partials/navbar', {
+  navLinksRight: [
+    { href: '/cart', label: 'Cart', badgeValue: cartCount, badgeClass: 'bg-primary', classes: 'position-relative' },
+    { href: '/orders/history', label: 'My Orders' },
+    { href: '/shopping', label: 'Shop' },
+    { href: '/logout', label: 'Logout' }
+  ]
+}) %>
+  <div class="container mt-4">
+    <div class="alert alert-danger">
+      <h5 class="mb-1"><%= title || 'Error' %></h5>
+      <div class="small">Response code: <%= responseCode || 'N.A.' %></div>
+      <% if (instructions) { %>
+        <div class="small mt-1"><%= instructions %></div>
+      <% } %>
+      <div class="mt-2"><%= errorMsg || 'Unable to generate NETS QR code.' %></div>
+    </div>
+    <a href="/payment" class="btn btn-secondary">Back to Payment</a>
+  </div>
+<%- include('partials/footer') %>
