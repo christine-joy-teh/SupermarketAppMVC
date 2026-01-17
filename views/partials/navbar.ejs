@@ -5,15 +5,6 @@
   const rightLinks = (typeof navLinksRight !== 'undefined' && Array.isArray(navLinksRight)) ? navLinksRight : [];
   const finalRightLinks = [...rightLinks];
   if (typeof user !== 'undefined' && user && user.role !== 'admin') {
-    const pointsValue = Number(
-      typeof user.loyalty_points !== 'undefined' ? user.loyalty_points : user.loyaltyPoints
-    );
-    const points = Number.isFinite(pointsValue) ? pointsValue : 0;
-    finalRightLinks.unshift({
-      href: '/loyalty',
-      label: `Points: ${points}`,
-      classes: 'text-info fw-semibold'
-    });
     const plan = (user.plan || '').toLowerCase() || 'none';
     finalRightLinks.unshift({
       href: `/membership/payment?plan=${plan}`,
