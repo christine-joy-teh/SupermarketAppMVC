@@ -1,0 +1,61 @@
+<%- include('partials/head', { pageTitle: 'NETS QR - Supermarket App' }) %>
+<%- include('partials/navbar', {
+  navLinksRight: [
+    { href: '/cart', label: 'Cart', badgeValue: cartCount, badgeClass: 'bg-primary', classes: 'position-relative' },
+    { href: '/orders/history', label: 'My Orders' },
+    { href: '/shopping', label: 'Shop' },
+    { href: '/logout', label: 'Logout' }
+  ]
+}) %>
+  <div class="container mt-4">
+    <h2 class="mt-2">Scan the QR Code</h2>
+    <p class="text-muted">Scan with your bank simulator app to complete payment.</p>
+
+    <div class="mt-3">
+      <% if (qrCodeUrl) { %>
+        <img src="<%= qrCodeUrl %>" alt="NETS QR Code" style="max-width: 260px; width: 100%;">
+      <% } %>
+    </div>
+
+    <div class="mt-2">
+      Time remaining: <span id="nets-timer"></span>
+    </div>
+
+    <% if (txnRetrievalRef) { %>
+      <div class="text-muted small mt-2">Reference: <%= txnRetrievalRef %></div>
+    <% } %>
+
+    <div class="mt-4">
+      <% if (typeof pointsAvailable !== 'undefined') { %>
+        <div class="text-muted small mb-2">Loyalty points available: <%= pointsAvailable %></div>
+      <% } %>
+      <form action="/nets/confirm" method="POST" class="d-flex flex-column gap-2">
+        <input type="hidden" name="loyaltyRedeemPoints" value="<%= typeof loyaltyRedeemPoints !== 'undefined' ? loyaltyRedeemPoints : 0 %>">
+        <button class="btn btn-primary" type="submit">I have completed NETS payment</button>
+      </form>
+      <div class="mt-2">
+        <a href="/payment">Cancel</a>
+      </div>
+    </div>
+  </div>
+  <script>
+    (function () {
+      var totalSeconds = Number('<%= timer || 300 %>');
+      var el = document.getElementById('nets-timer');
+      function tick() {
+        var minutes = Math.floor(totalSeconds / 60);
+        var seconds = totalSeconds % 60;
+        el.textContent = minutes + ':' + String(seconds).padStart(2, '0');
+        if (totalSeconds > 0) {
+          totalSeconds -= 1;
+          return;
+        }
+        window.location.href = '/nets-qr/fail';
+      }
+      if (el) {
+        tick();
+        setInterval(tick, 1000);
+      }
+    })();
+  </script>
+<%- include('partials/footer') %>

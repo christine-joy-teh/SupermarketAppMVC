@@ -49,11 +49,19 @@
             <div class="accordion-body">
               <div class="d-flex justify-content-end mb-3">
                 <a class="btn btn-sm btn-outline-secondary" href="/orders/<%= order.id %>/invoice">View invoice</a>
+                <% const refund = refundsMap && refundsMap[order.id] ? refundsMap[order.id] : null; %>
+                <% const canRefund = (order.paymentMethod || '').toLowerCase() === 'paypal' && (!refund || refund.status === 'denied'); %>
+                <% if (canRefund) { %>
+                  <a class="btn btn-sm btn-outline-primary ms-2" href="/refunds/new?orderId=<%= order.id %>">Request refund</a>
+                <% } %>
               </div>
               <p class="mb-2"><strong>Delivery:</strong> <%= order.deliveryMethod || 'delivery' %></p>
               <p class="mb-2"><strong>Subtotal:</strong> $<%= Number(order.subtotal || 0).toFixed(2) %></p>
               <p class="mb-2"><strong>Savings:</strong> $<%= Number(order.savings || 0).toFixed(2) %></p>
               <p class="mb-3"><strong>Total charged:</strong> $<%= Number(order.total || 0).toFixed(2) %></p>
+              <% if (refund) { %>
+                <p class="mb-3"><strong>Refund status:</strong> <span class="badge bg-secondary text-uppercase"><%= refund.status %></span></p>
+              <% } %>
               <% const items = Array.isArray(order.items) ? order.items : []; %>
               <% if (!items.length) { %>
                 <div class="text-muted">No items recorded for this order.</div>

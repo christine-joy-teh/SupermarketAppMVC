@@ -1,0 +1,46 @@
+<%- include('partials/head', { pageTitle: 'Loyalty Points - Supermarket App' }) %>
+<%- include('partials/navbar', {
+  navLinksRight: [
+    { href: '/cart', label: 'Cart', badgeValue: cartCount, badgeClass: 'bg-primary', classes: 'position-relative' },
+    { href: '/orders/history', label: 'My Orders' },
+    { href: '/shopping', label: 'Shop' },
+    { href: '/logout', label: 'Logout' }
+  ]
+}) %>
+  <div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div>
+        <h2 class="mt-2">Loyalty Points</h2>
+        <p class="text-muted mb-0">Earn points when you pay with PayPal or NETS.</p>
+      </div>
+      <a href="/payment" class="btn btn-outline-secondary">Go to Payment</a>
+    </div>
+
+    <div class="card bg-light border-0 shadow-sm mb-3">
+      <div class="card-body">
+        <h5 class="mb-1">Current balance</h5>
+        <div class="display-6 fw-semibold"><%= points %> points</div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-body">
+        <h6 class="text-uppercase text-muted small mb-2">How you can use points</h6>
+        <ul class="mb-0">
+          <li>Points discount: 10 points = $1 off (up to 50% of your total).</li>
+          <li>Redeemable in multiples of 10 points at checkout.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <h6 class="text-uppercase text-muted small mb-2">Tips</h6>
+        <ul class="mb-0">
+          <li>Choose your reward at checkout on the payment page.</li>
+          <li>Points are added after payment is completed.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+<%- include('partials/footer') %>

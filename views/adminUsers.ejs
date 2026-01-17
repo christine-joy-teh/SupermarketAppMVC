@@ -1,9 +1,10 @@
-<%- include('partials/head', { pageTitle: 'Manage Users - Supermarket App' }) %>
+﻿<%- include('partials/head', { pageTitle: 'Manage Users - Supermarket App' }) %>
 <%- include('partials/navbar', {
   navLinksLeft: [
     { href: '/inventory', label: 'Inventory' },
     { href: '/addProduct', label: 'Add Product' },
     { href: '/admin/orders', label: 'Orders' },
+    { href: '/admin/refunds', label: 'Refunds' },
     { href: '/admin/users', label: 'Users', active: true },
     { href: '/admin/promotion', label: 'Promotion' }
   ],
@@ -37,6 +38,7 @@
           <th>Email</th>
           <th>Role</th>
           <th>Plan</th>
+          <th>Points</th>
           <th>Contact</th>
           <th>Address</th>
           <th class="text-center">Actions</th>
@@ -64,8 +66,9 @@
                   <span class="badge bg-info text-dark text-uppercase"><%= u.plan %></span>
                 <% } %>
               </td>
-              <td><%= u.contact || '—' %></td>
-              <td><%= u.address || '—' %></td>
+              <td><%= typeof u.loyalty_points !== 'undefined' ? u.loyalty_points : 0 %></td>
+              <td><%= u.contact || 'â€”' %></td>
+              <td><%= u.address || 'â€”' %></td>
               <td class="text-center">
                 <div class="d-flex justify-content-center gap-2">
                   <a href="/admin/users/<%= u.id %>/edit" class="btn btn-sm btn-outline-primary">Edit</a>
@@ -81,7 +84,7 @@
           <% }) %>
         <% } else { %>
           <tr>
-            <td colspan="8" class="text-center text-muted">No users found.</td>
+            <td colspan="9" class="text-center text-muted">No users found.</td>
           </tr>
         <% } %>
       </tbody>
