@@ -2,6 +2,7 @@
 
 const UserModel = require('../models/userModel');
 const OrderModel = require('../models/orderModel');
+const membershipPlans = require('../models/membershipPlans');
 
 function resolveUserId(user) {
   if (!user) return null;
@@ -90,6 +91,9 @@ async function login(req, res) {
     if (typeof req.session.user.loyalty_points === 'undefined' && typeof req.session.user.loyaltyPoints === 'undefined') {
       req.session.user.loyalty_points = 0;
     }
+    if (typeof req.session.user.wallet_balance === 'undefined' && typeof req.session.user.walletBalance === 'undefined') {
+      req.session.user.wallet_balance = 0;
+    }
     try {
       const savedCart = await OrderModel.getCartByUserId(resolveUserId(req.session.user));
       if (Array.isArray(savedCart) && savedCart.length) {
@@ -136,22 +140,25 @@ async function logout(req, res) {
 
 // Membership payment page
 function renderMembershipPayment(req, res) {
-  const planKey = (req.query.plan || 'silver').toLowerCase();
+  const planKey = membershipPlans.normalizePlanKey(req.query.plan || 'silver');
   const confirm = req.query.confirm || '';
-  const plans = {
-    basic: { name: 'Basic', amount: 0, priceLabel: 'Free', perks: ['Standard checkout'] },
-    silver: { name: 'Silver', amount: 4.99, priceLabel: '$4.99 / mo', perks: ['Free delivery over $50', '5% off selected items'] },
-    gold: { name: 'Gold', amount: 9.99, priceLabel: '$9.99 / mo', perks: ['Free delivery', '10% off storewide', 'Priority support'] }
-  };
-  const selected = plans[planKey] || plans.silver;
-  res.render('membershipPayment', { planKey: planKey, plan: selected, user: req.session.user, confirm });
+  const plans = membershipPlans.getMembershipPlans();
+  const selected = membershipPlans.getMembershipPlan(planKey) || plans.silver;
+  res.render('membershipPayment', {
+    planKey,
+    plan: selected,
+    plans,
+    user: req.session.user,
+    confirm,
+    paypalClientId: process.env.PAYPAL_CLIENT_ID
+  });
 }
 
 // Process membership payment
 async function processMembershipPayment(req, res) {
-  const plan = (req.body.plan || '').toLowerCase();
-  const allowed = ['basic', 'silver', 'gold'];
-  if (!allowed.includes(plan)) {
+  const plan = membershipPlans.normalizePlanKey(req.body.plan);
+  const selected = membershipPlans.getMembershipPlan(plan);
+  if (!selected) {
     req.flash('error', 'Invalid plan selected.');
     return res.redirect('/membership/payment');
   }
@@ -161,7 +168,7 @@ async function processMembershipPayment(req, res) {
     return res.redirect('/membership/payment');
   }
 
-  if (plan !== 'basic') {
+  if (selected.key !== 'basic') {
     const { cardName = '', cardNumber = '', expiry = '', cvv = '' } = req.body;
     const cleanNumber = cardNumber.replace(/\s+/g, '');
     const expiryOk = /^[0-1][0-9]\/[0-9]{2}$/.test(expiry);
@@ -175,10 +182,10 @@ async function processMembershipPayment(req, res) {
 
   // Update user's membership plan
   try {
-    await UserModel.update(userId, { plan });
-    if (req.session.user) req.session.user.plan = plan;
-    req.flash('success', `Your membership plan has been updated to ${plan.toUpperCase()}.`);
-    return res.redirect(303, `/membership/payment?plan=${plan}&confirm=1`);
+    await UserModel.update(userId, { plan: selected.key });
+    if (req.session.user) req.session.user.plan = selected.key;
+    req.flash('success', `Your membership plan has been updated to ${selected.key.toUpperCase()}.`);
+    return res.redirect(303, `/membership/payment?plan=${selected.key}&confirm=1`);
   } catch (err) {
     console.error('Unable to update membership:', err.message);
     req.flash('error', 'Could not update membership. Please try again.');
