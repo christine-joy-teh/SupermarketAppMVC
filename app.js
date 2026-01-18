@@ -184,8 +184,18 @@ app.post('/checkout', checkAuthenticated, (req, res) => orderController.checkout
 // PayPal routes
 app.post('/paypal/create-order', checkAuthenticated, (req, res) => paymentController.createPaypalOrder(req, res));
 app.post('/paypal/capture-order', checkAuthenticated, (req, res) => paymentController.capturePaypalOrder(req, res));
+app.post('/paypal/membership/create-order', checkAuthenticated, (req, res) => paymentController.createMembershipPaypalOrder(req, res));
+app.post('/paypal/membership/capture-order', checkAuthenticated, (req, res) => paymentController.captureMembershipPaypalOrder(req, res));
+app.post('/paypal/wallet/create-order', checkAuthenticated, (req, res) => paymentController.createWalletTopupPaypalOrder(req, res));
+app.post('/paypal/wallet/capture-order', checkAuthenticated, (req, res) => paymentController.captureWalletTopupPaypalOrder(req, res));
 app.post('/nets/qr', checkAuthenticated, (req, res) => paymentController.generateNetsQrCode(req, res));
 app.post('/nets/confirm', checkAuthenticated, (req, res) => paymentController.confirmNetsPayment(req, res));
+app.post('/membership/nets/qr', checkAuthenticated, (req, res) => paymentController.generateMembershipNetsQrCode(req, res));
+app.post('/membership/nets/confirm', checkAuthenticated, (req, res) => paymentController.confirmMembershipNetsPayment(req, res));
+app.get('/wallet/topup', checkAuthenticated, (req, res) => paymentController.renderWalletTopupPage(req, res));
+app.post('/wallet/nets/qr', checkAuthenticated, (req, res) => paymentController.generateWalletTopupNetsQrCode(req, res));
+app.post('/wallet/nets/confirm', checkAuthenticated, (req, res) => paymentController.confirmWalletTopupNetsPayment(req, res));
+app.post('/wallet/pay', checkAuthenticated, (req, res) => paymentController.payWithWallet(req, res));
 app.get('/nets-qr/fail', checkAuthenticated, async (req, res) => {
     res.render('netsQrFail', {
         title: 'Transaction Failed',

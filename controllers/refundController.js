@@ -2,12 +2,24 @@ const path = require('path');
 const OrderModel = require('../models/orderModel');
 const RefundModel = require('../models/refundModel');
 const paypalClient = require('../services/paypalClient');
+const UserModel = require('../models/userModel');
 const orderController = require('./orderController');
 
 function resolveUserId(user) {
   return (orderController && orderController.resolveUserId)
     ? orderController.resolveUserId(user)
     : (user && (user.id || user.userId || user.user_id || user.userID)) || null;
+}
+
+function resolveRefundPayment(order) {
+  const method = (order && order.paymentMethod ? String(order.paymentMethod).toLowerCase() : '');
+  if (method === 'paypal' && order.paymentRef) {
+    return { method: 'paypal', label: 'PayPal' };
+  }
+  if (method === 'wallet') {
+    return { method: 'wallet', label: 'E-wallet' };
+  }
+  return null;
 }
 
 async function renderRefundRequest(req, res) {
@@ -31,8 +43,8 @@ async function renderRefundRequest(req, res) {
       return res.redirect('/orders/history');
     }
 
-    if (order.paymentMethod !== 'paypal' || !order.paymentRef) {
-      req.flash('error', 'Refunds are only available for PayPal payments.');
+    if (!resolveRefundPayment(order)) {
+      req.flash('error', 'Refunds are only available for PayPal or E-wallet payments.');
       return res.redirect('/orders/history');
     }
 
@@ -72,8 +84,8 @@ async function submitRefundRequest(req, res) {
       return res.redirect('/orders/history');
     }
 
-    if (order.paymentMethod !== 'paypal' || !order.paymentRef) {
-      req.flash('error', 'Refunds are only available for PayPal payments.');
+    if (!resolveRefundPayment(order)) {
+      req.flash('error', 'Refunds are only available for PayPal or E-wallet payments.');
       return res.redirect('/orders/history');
     }
 
@@ -131,13 +143,24 @@ async function approveRefund(req, res) {
     }
 
     const order = await OrderModel.getOrderById(refund.orderId);
-    if (!order || order.paymentMethod !== 'paypal' || !order.paymentRef) {
-      req.flash('error', 'This order is not eligible for PayPal refund.');
+    const payment = resolveRefundPayment(order);
+    if (!order || !payment) {
+      req.flash('error', 'This order is not eligible for a refund.');
       return res.redirect('/admin/refunds');
     }
 
-    const amount = Number(order.total || 0).toFixed(2);
-    await paypalClient.refundCapture(order.paymentRef, amount);
+    const amountValue = Number(order.total || 0);
+    if (!Number.isFinite(amountValue) || amountValue <= 0) {
+      req.flash('error', 'Invalid refund amount.');
+      return res.redirect('/admin/refunds');
+    }
+
+    if (payment.method === 'paypal') {
+      await paypalClient.refundCapture(order.paymentRef, amountValue.toFixed(2));
+    } else if (payment.method === 'wallet') {
+      await UserModel.adjustWalletBalance(order.userId, amountValue);
+    }
+
     await RefundModel.updateStatus(refundId, { status: 'approved', adminNote });
     req.flash('success', `Refund approved for order #${refund.orderId}.`);
     res.redirect('/admin/refunds');

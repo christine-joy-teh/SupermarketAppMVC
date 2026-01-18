@@ -5,6 +5,15 @@
   const rightLinks = (typeof navLinksRight !== 'undefined' && Array.isArray(navLinksRight)) ? navLinksRight : [];
   const finalRightLinks = [...rightLinks];
   if (typeof user !== 'undefined' && user && user.role !== 'admin') {
+    const walletValue = Number(
+      typeof user.wallet_balance !== 'undefined' ? user.wallet_balance : user.walletBalance
+    );
+    const walletBalance = Number.isFinite(walletValue) ? walletValue : 0;
+    finalRightLinks.unshift({
+      href: '/wallet/topup',
+      label: `Wallet: $${walletBalance.toFixed(2)}`,
+      classes: 'text-success fw-semibold'
+    });
     const pointsValue = Number(
       typeof user.loyalty_points !== 'undefined' ? user.loyalty_points : user.loyaltyPoints
     );

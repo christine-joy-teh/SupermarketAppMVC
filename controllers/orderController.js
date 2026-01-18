@@ -11,7 +11,7 @@ let promotionConfig = {
 
 const loyaltyConfig = {
   earnRate: 10,
-  discountRate: 0.1,
+  discountRate: 0.01,
   maxRedemptionPercent: 50,
   freeItem: { pointsCost: 100, value: 2 },
   exclusivePromo: { pointsCost: 500, percent: 5 }
@@ -32,9 +32,16 @@ function getUserPoints(user) {
   return Number.isFinite(points) ? points : 0;
 }
 
+function getUserWalletBalance(user) {
+  if (!user) return 0;
+  const raw = typeof user.wallet_balance !== 'undefined' ? user.wallet_balance : user.walletBalance;
+  const balance = Number(raw);
+  return Number.isFinite(balance) ? balance : 0;
+}
+
 function normalizeRedeemPoints(redeemPoints) {
   const raw = Math.max(0, Math.floor(Number(redeemPoints) || 0));
-  return Math.floor(raw / 10) * 10;
+  return Math.floor(raw / 100) * 100;
 }
 
 function buildLoyaltyContext(user, redeemPoints) {
@@ -285,7 +292,8 @@ async function renderCart(req, res) {
 
 async function renderPayment(req, res) {
   const data = await buildCartViewData(req);
-  return res.render('payment', { ...data, paypalClientId: process.env.PAYPAL_CLIENT_ID });
+  const walletBalance = getUserWalletBalance(req.session.user);
+  return res.render('payment', { ...data, walletBalance, paypalClientId: process.env.PAYPAL_CLIENT_ID });
 }
 
 async function addToCart(req, res) {
@@ -685,6 +693,7 @@ module.exports = {
   buildLoyaltyContext,
   calculateLoyaltyPointsEarned,
   getUserPoints,
+  getUserWalletBalance,
   normalizeRedeemPoints,
   resolveUserId,
   get promotionConfig() { return promotionConfig; },
