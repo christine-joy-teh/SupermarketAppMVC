@@ -1,0 +1,113 @@
+<% const paypalSdk = paypalClientId ? `<script src="https://www.paypal.com/sdk/js?client-id=${paypalClientId}&currency=SGD"></script>` : ''; %>
+<%- include('partials/head', { pageTitle: 'Wallet Top-up', extraHead: paypalSdk }) %>
+<%- include('partials/navbar', {
+  navLinksRight: [
+    { href: '/cart', label: 'Cart', badgeValue: cartCount, badgeClass: 'bg-primary', classes: 'position-relative' },
+    { href: '/orders/history', label: 'My Orders' },
+    { href: '/shopping', label: 'Shop' },
+    { href: '/logout', label: 'Logout' }
+  ]
+}) %>
+
+<div class="container mt-4">
+  <% if (success && success.length) { %>
+    <div class="alert alert-success"><%= success[0] %></div>
+  <% } %>
+  <% if (error && error.length) { %>
+    <div class="alert alert-danger"><%= error[0] %></div>
+  <% } %>
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mt-2">Wallet Top-up</h2>
+    <a href="/payment" class="btn btn-outline-secondary">Back to Checkout</a>
+  </div>
+
+  <% const walletAmount = typeof walletBalance !== 'undefined' ? Number(walletBalance || 0) : 0; %>
+  <div class="card mb-3">
+    <div class="card-body">
+      <h6 class="card-title mb-2">Current balance</h6>
+      <div class="fs-5 fw-semibold">$<%= walletAmount.toFixed(2) %></div>
+      <p class="text-muted small mb-0">Top up with PayPal or NETS and use your wallet at checkout.</p>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <h6 class="card-title mb-3">Top-up options</h6>
+      <form action="/wallet/nets/qr" method="POST" class="mb-3">
+        <div class="input-group">
+          <span class="input-group-text">$</span>
+          <input type="number" name="amount" class="form-control" min="10" step="1" placeholder="Minimum $10">
+          <button class="btn btn-success" type="submit">Top up with NETS</button>
+        </div>
+      </form>
+
+      <% if (paypalClientId) { %>
+        <div class="mb-2">
+          <label class="form-label">PayPal top-up amount</label>
+          <div class="input-group">
+            <span class="input-group-text">$</span>
+            <input type="number" id="wallet-topup-amount" class="form-control" min="10" step="1" placeholder="Minimum $10">
+          </div>
+        </div>
+        <div id="wallet-paypal-container"></div>
+      <% } else { %>
+        <div class="alert alert-warning mb-0">PayPal is not configured for wallet top-ups.</div>
+      <% } %>
+    </div>
+  </div>
+</div>
+
+<% if (paypalClientId) { %>
+  <script>
+    (function () {
+      const topupContainer = document.getElementById('wallet-paypal-container');
+      const topupInput = document.getElementById('wallet-topup-amount');
+      if (!topupContainer || !window.paypal) return;
+
+      paypal.Buttons({
+        createOrder: function () {
+          const amount = topupInput ? Number(topupInput.value) : 0;
+          if (!Number.isFinite(amount) || amount < 10) {
+            alert('Minimum top-up amount is $10.');
+            return Promise.reject(new Error('Invalid amount'));
+          }
+          return fetch('/paypal/wallet/create-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amount: amount })
+          })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+              if (data.id) return data.id;
+              throw new Error(data.error || 'Unable to create PayPal order.');
+            });
+        },
+        onApprove: function (data) {
+          const amount = topupInput ? Number(topupInput.value) : 0;
+          return fetch('/paypal/wallet/capture-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderId: data.orderID, amount: amount })
+          })
+            .then(function (res) { return res.json(); })
+            .then(function (result) {
+              if (result.redirect) {
+                window.location.href = result.redirect;
+                return;
+              }
+              if (result.error) {
+                alert(result.error);
+              }
+            });
+        },
+        onError: function (err) {
+          console.error(err);
+          alert('PayPal top-up failed. Please try again.');
+        }
+      }).render('#wallet-paypal-container');
+    })();
+  </script>
+<% } %>
+
+<%- include('partials/footer') %>
