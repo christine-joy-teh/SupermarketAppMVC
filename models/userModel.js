@@ -13,6 +13,7 @@ function getDbName() {
 let planColumnReady;
 let disabledColumnReady;
 let loyaltyColumnReady;
+let walletColumnReady;
 
 async function ensurePlanColumn() {
   const dbName = getDbName();
@@ -122,13 +123,54 @@ async function hasLoyaltyPointsColumn() {
   return loyaltyColumnReady;
 }
 
+async function ensureWalletBalanceColumn() {
+  const dbName = getDbName();
+
+  try {
+    const [exists] = await db.query(
+      "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND COLUMN_NAME = 'wallet_balance'",
+      [dbName]
+    );
+    if (exists.length) return true;
+  } catch (err) {
+    console.warn('Wallet balance column check failed:', err.message);
+  }
+
+  try {
+    await db.query('ALTER TABLE users ADD COLUMN wallet_balance DECIMAL(10,2) NOT NULL DEFAULT 0');
+  } catch (err) {
+    if (err.code !== 'ER_DUP_FIELDNAME') {
+      console.warn('Wallet balance column migration skipped:', err.message);
+    }
+  }
+
+  try {
+    const [rows] = await db.query(
+      "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND COLUMN_NAME = 'wallet_balance'",
+      [dbName]
+    );
+    return rows.length > 0;
+  } catch (err) {
+    console.warn('Wallet balance column final check failed:', err.message);
+    return false;
+  }
+}
+
+async function hasWalletBalanceColumn() {
+  if (!walletColumnReady) {
+    walletColumnReady = ensureWalletBalanceColumn();
+  }
+  return walletColumnReady;
+}
+
 async function list() {
   // Prefer selecting plan; if column is missing, fall back gracefully.
-  const fieldsWithPlan = 'id, username, email, address, contact, role, plan, loyalty_points, disabled';
+  const fieldsWithPlan = 'id, username, email, address, contact, role, plan, loyalty_points, wallet_balance, disabled';
   const fieldsWithoutPlan = 'id, username, email, address, contact, role';
   try {
     await hasPlanColumn();
     await hasLoyaltyPointsColumn();
+    await hasWalletBalanceColumn();
     await hasDisabledColumn();
     const [rows] = await db.query(`SELECT ${fieldsWithPlan} FROM users ORDER BY id DESC`);
     return rows;
@@ -140,11 +182,12 @@ async function list() {
 }
 
 async function getById(id) {
-  const fieldsWithPlan = 'id, username, email, address, contact, role, plan, loyalty_points, disabled';
+  const fieldsWithPlan = 'id, username, email, address, contact, role, plan, loyalty_points, wallet_balance, disabled';
   const fieldsWithoutPlan = 'id, username, email, address, contact, role';
   try {
     await hasPlanColumn();
     await hasLoyaltyPointsColumn();
+    await hasWalletBalanceColumn();
     await hasDisabledColumn();
     const [rows] = await db.query(`SELECT ${fieldsWithPlan} FROM users WHERE id = ?`, [id]);
     return rows[0] || null;
@@ -155,7 +198,7 @@ async function getById(id) {
   }
 }
 
-async function update(id, { username, email, address, contact, role, plan, disabled, loyaltyPoints }) {
+async function update(id, { username, email, address, contact, role, plan, disabled, loyaltyPoints, walletBalance }) {
   const setters = [];
   const params = [];
 
@@ -204,6 +247,19 @@ async function update(id, { username, email, address, contact, role, plan, disab
       // column missing; skip loyalty_points silently
     }
   }
+  if (typeof walletBalance !== 'undefined') {
+    try {
+      await hasWalletBalanceColumn();
+      const cleanBalance = Math.max(0, Number(walletBalance) || 0);
+      setters.push('wallet_balance = ?');
+      params.push(cleanBalance);
+    } catch (err) {
+      if (err.code !== 'ER_BAD_FIELD_ERROR') {
+        throw err;
+      }
+      // column missing; skip wallet_balance silently
+    }
+  }
   if (typeof disabled !== 'undefined') {
     try {
       await hasDisabledColumn();
@@ -226,7 +282,9 @@ async function update(id, { username, email, address, contact, role, plan, disab
   } catch (err) {
     // If plan column missing and we attempted to set it, retry without plan
     if (err.code === 'ER_BAD_FIELD_ERROR') {
-      const filteredSetters = setters.filter(s => !s.startsWith('plan =') && !s.startsWith('loyalty_points ='));
+      const filteredSetters = setters.filter(
+        s => !s.startsWith('plan =') && !s.startsWith('loyalty_points =') && !s.startsWith('wallet_balance =')
+      );
       const filteredParams = params.slice(0, filteredSetters.length);
       filteredParams.push(id);
       const [result] = await db.query(`UPDATE users SET ${filteredSetters.join(', ')} WHERE id = ?`, filteredParams);
@@ -295,12 +353,44 @@ async function adjustLoyaltyPoints(id, delta) {
   }
 }
 
+async function adjustWalletBalance(id, delta) {
+  const cleanDelta = Number(delta) || 0;
+  if (!Number.isFinite(cleanDelta) || cleanDelta === 0) {
+    return { affectedRows: 0 };
+  }
+  try {
+    await hasWalletBalanceColumn();
+    const [result] = await db.query(
+      'UPDATE users SET wallet_balance = GREATEST(0, COALESCE(wallet_balance, 0) + ?) WHERE id = ?',
+      [cleanDelta, id]
+    );
+    return result;
+  } catch (err) {
+    if (err.code === 'ER_BAD_FIELD_ERROR') {
+      return { affectedRows: 0 };
+    }
+    throw err;
+  }
+}
+
 async function getLoyaltyPointsById(id) {
   try {
     await hasLoyaltyPointsColumn();
     const [rows] = await db.query('SELECT loyalty_points FROM users WHERE id = ?', [id]);
     if (!rows.length) return 0;
     return Number(rows[0].loyalty_points) || 0;
+  } catch (err) {
+    if (err.code === 'ER_BAD_FIELD_ERROR') return 0;
+    throw err;
+  }
+}
+
+async function getWalletBalanceById(id) {
+  try {
+    await hasWalletBalanceColumn();
+    const [rows] = await db.query('SELECT wallet_balance FROM users WHERE id = ?', [id]);
+    if (!rows.length) return 0;
+    return Number(rows[0].wallet_balance) || 0;
   } catch (err) {
     if (err.code === 'ER_BAD_FIELD_ERROR') return 0;
     throw err;
@@ -316,5 +406,7 @@ module.exports = {
   create,
   authenticate,
   adjustLoyaltyPoints,
-  getLoyaltyPointsById
+  getLoyaltyPointsById,
+  adjustWalletBalance,
+  getWalletBalanceById
 };
