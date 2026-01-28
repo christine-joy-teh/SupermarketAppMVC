@@ -215,7 +215,7 @@ app.post('/wallet/pay', checkAuthenticated, (req, res) => paymentController.payW
 app.get('/logout', (req, res) => userController.logout(req, res));
 
 
-
+//test
 
 // Start the server
 const PORT = process.env.PORT || 3000;
