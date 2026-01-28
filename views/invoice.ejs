@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 <%- include('partials/head', {
   pageTitle: `Invoice #${order.id} - Supermarket App`,
   extraHead: `
@@ -127,3 +128,142 @@
 </div>
 
 <%- include('partials/footer') %>
+=======
+<%- include('partials/head', {
+  pageTitle: `Invoice #${order.id} - Supermarket App`,
+  extraHead: `
+    <style>
+      .invoice-shell { background: linear-gradient(135deg, #f8f9fa 0%, #eef2f7 100%); min-height: 100vh; }
+      .invoice-card { background: #fff; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); }
+      .invoice-title { letter-spacing: 0.08em; }
+      .totals-row .label { text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.06em; }
+      .totals-row .value { font-size: 1.05rem; }
+      @media print {
+        .d-print-none { display: none !important; }
+        body { background: #fff !important; }
+        .invoice-shell { padding-top: 0 !important; background: #fff !important; }
+      }
+    </style>
+  `
+}) %>
+<%
+  const isAdmin = user && user.role === 'admin';
+  const navLinksRight = isAdmin
+    ? [
+        { href: '/inventory', label: 'Inventory', active: false },
+        { href: '/admin/orders', label: 'Orders', active: false },
+        { href: '/admin/refunds', label: 'Refunds', active: false },
+        { href: '/logout', label: 'Logout' }
+      ]
+    : [
+        { href: '/shopping', label: 'Shop' },
+        { href: '/cart', label: 'Cart', badgeValue: cartCount, badgeClass: 'bg-primary' },
+        { href: '/orders/history', label: 'My Orders', active: true },
+        { href: '/logout', label: 'Logout' }
+      ];
+%>
+<%- include('partials/navbar', { navLinksRight }) %>
+
+<div class="invoice-shell py-4">
+  <div class="container">
+    <% if (success && success.length) { %>
+      <div class="alert alert-success d-print-none"><%= success[0] %></div>
+    <% } %>
+    <% if (error && error.length) { %>
+      <div class="alert alert-danger d-print-none"><%= error[0] %></div>
+    <% } %>
+
+    <div class="d-flex justify-content-between align-items-start mb-4">
+      <div>
+        <p class="text-muted text-uppercase small mb-1 invoice-title">Invoice</p>
+        <h2 class="mb-1">Order #<%= order.id %></h2>
+        <div class="text-muted">Placed: <%= order.createdAt ? new Date(order.createdAt).toLocaleString() : 'Not recorded' %></div>
+        <div class="mt-1">
+          <span class="badge bg-secondary text-uppercase"><%= order.status %></span>
+          <span class="badge bg-light text-dark text-uppercase ms-2"><%= order.deliveryMethod || 'delivery' %></span>
+        </div>
+      </div>
+      <div class="text-end d-print-none">
+        <button class="btn btn-outline-secondary btn-sm" onclick="window.print()">Print / Save PDF</button>
+      </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+      <div class="col-md-6">
+        <div class="invoice-card p-4 h-100">
+          <h6 class="text-uppercase text-muted mb-3">Billed To</h6>
+          <p class="mb-1 fw-semibold"><%= customer.name || 'Customer' %></p>
+          <p class="mb-1 text-muted"><%= customer.email || 'No email on file' %></p>
+          <p class="mb-1 text-muted">Contact: <%= customer.contact || 'N/A' %></p>
+          <p class="mb-0 text-muted">Address: <%= customer.address || 'N/A' %></p>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="invoice-card p-4 h-100">
+          <h6 class="text-uppercase text-muted mb-3">Order Summary</h6>
+          <div class="d-flex justify-content-between totals-row mb-2">
+            <span class="label text-muted">Payment Method</span>
+            <span class="value fw-semibold"><%= order.paymentMethod || 'n/a' %></span>
+          </div>
+          <div class="d-flex justify-content-between totals-row mb-3">
+            <span class="label text-muted">Payment ID</span>
+            <span class="value fw-semibold"><%= order.paymentRef || 'n/a' %></span>
+          </div>
+          <div class="d-flex justify-content-between totals-row mb-2">
+            <span class="label text-muted">Subtotal</span>
+            <span class="value fw-semibold">$<%= totals.subtotal.toFixed(2) %></span>
+          </div>
+          <div class="d-flex justify-content-between totals-row mb-2">
+            <span class="label text-muted">Savings</span>
+            <span class="value text-success fw-semibold">- $<%= totals.savings.toFixed(2) %></span>
+          </div>
+          <div class="d-flex justify-content-between totals-row pt-2 border-top mt-3">
+            <span class="label text-muted">Total</span>
+            <span class="value fs-4 fw-bold">$<%= totals.total.toFixed(2) %></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="invoice-card p-4 mb-4">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="text-uppercase text-muted mb-0">Items</h6>
+        <small class="text-muted"><%= items.length %> item<%= items.length === 1 ? '' : 's' %></small>
+      </div>
+      <% if (!items.length) { %>
+        <div class="text-muted">No line items recorded for this order.</div>
+      <% } else { %>
+        <div class="table-responsive">
+          <table class="table table-borderless align-middle mb-0">
+            <thead>
+              <tr class="text-muted small text-uppercase">
+                <th scope="col">Product</th>
+                <th scope="col" class="text-center">Qty</th>
+                <th scope="col" class="text-center">Price</th>
+                <th scope="col" class="text-end">Line Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% items.forEach(it => { %>
+                <tr>
+                  <td><%= it.productName %></td>
+                  <td class="text-center"><%= it.quantity %></td>
+                  <td class="text-center">$<%= Number(it.price || 0).toFixed(2) %></td>
+                  <td class="text-end fw-semibold">$<%= (Number(it.price || 0) * Number(it.quantity || 0)).toFixed(2) %></td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center d-print-none">
+      <a class="btn btn-outline-secondary" href="<%= isAdmin ? '/admin/orders' : '/orders/history' %>">Back</a>
+      <a class="btn btn-primary" href="<%= isAdmin ? '/inventory' : '/shopping' %>"><%= isAdmin ? 'Back to inventory' : 'Continue shopping' %></a>
+    </div>
+  </div>
+</div>
+
+<%- include('partials/footer') %>
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)

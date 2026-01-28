@@ -5,6 +5,10 @@
     { href: '/addProduct', label: 'Add Product' },
     { href: '/admin/orders', label: 'Orders' },
     { href: '/admin/refunds', label: 'Refunds', active: true },
+<<<<<<< HEAD
+=======
+    { href: '/admin/transactions', label: 'Transactions' },
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
     { href: '/admin/users', label: 'Users' },
     { href: '/admin/promotion', label: 'Promotion' }
   ],
@@ -18,7 +22,11 @@
     <div>
       <p class="text-uppercase text-muted small mb-1">Admin</p>
       <h3 class="mb-0">Refund Requests</h3>
+<<<<<<< HEAD
       <small class="text-muted">Approve or deny customer refunds</small>
+=======
+      <small class="text-muted">Approve or deny customer refunds (credited to e-wallet)</small>
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
     </div>
   </div>
 
@@ -89,5 +97,26 @@
       </tbody>
     </table>
   </div>
+<<<<<<< HEAD
+=======
+
+  <% if (pagination && pagination.totalPages > 1) { %>
+    <nav class="mt-3" aria-label="Refunds pagination">
+      <ul class="pagination justify-content-center mb-0">
+        <li class="page-item <%= pagination.page <= 1 ? 'disabled' : '' %>">
+          <a class="page-link" href="/admin/refunds?page=<%= pagination.page - 1 %>">Previous</a>
+        </li>
+        <% for (let p = 1; p <= pagination.totalPages; p++) { %>
+          <li class="page-item <%= p === pagination.page ? 'active' : '' %>">
+            <a class="page-link" href="/admin/refunds?page=<%= p %>"><%= p %></a>
+          </li>
+        <% } %>
+        <li class="page-item <%= pagination.page >= pagination.totalPages ? 'disabled' : '' %>">
+          <a class="page-link" href="/admin/refunds?page=<%= pagination.page + 1 %>">Next</a>
+        </li>
+      </ul>
+    </nav>
+  <% } %>
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
 </div>
 <%- include('partials/footer') %>

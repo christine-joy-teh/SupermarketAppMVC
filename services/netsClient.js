@@ -1,4 +1,9 @@
 const axios = require('axios');
+<<<<<<< HEAD
+=======
+const https = require('https');
+const { URL } = require('url');
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
 
 const NETS_API = process.env.NETS_API || 'https://sandbox.nets.openapipaas.com';
 
@@ -100,8 +105,130 @@ async function generateQrCode(req, res) {
   return res.render('netsQrFail', errorPayload);
 }
 
+<<<<<<< HEAD
 module.exports = {
   generateQrCode,
   requestQrCode,
   NETS_API
+=======
+function parseWebhookPayload(rawPayload) {
+  if (!rawPayload) return null;
+  try {
+    const parsed = JSON.parse(rawPayload);
+    if (parsed && parsed.result && parsed.result.data) {
+      return parsed.result.data;
+    }
+    if (parsed && parsed.data) {
+      return parsed.data;
+    }
+    return parsed;
+  } catch (err) {
+    console.error('Unable to parse NETS webhook payload:', err.message);
+    return null;
+  }
+}
+
+function interpretPaymentStatus(payload) {
+  if (!payload) return null;
+  const normalizedResponseCode = String(payload.response_code ?? payload.responseCode ?? '').trim();
+  const normalizedTxnStatus = String(payload.txn_status ?? payload.txnStatus ?? payload.status ?? '').trim().toUpperCase();
+  const result = {
+    payload,
+    responseCode: normalizedResponseCode,
+    txnStatus: normalizedTxnStatus,
+    success: false,
+    fail: false,
+    message: payload.response_message || payload.instructions || payload.message || ''
+  };
+  if (normalizedResponseCode === '00' || normalizedResponseCode === '0') {
+    result.success = true;
+    return result;
+  }
+  if (['1', 'SUCCESS', 'PAID', 'CONFIRMED'].includes(normalizedTxnStatus)) {
+    result.success = true;
+    return result;
+  }
+  if (['2', 'FAILED', 'CANCELLED', 'ABORTED', 'EXPIRED', 'REJECTED'].includes(normalizedTxnStatus)) {
+    result.fail = true;
+    if (!result.message) {
+      result.message = 'NETS payment failed.';
+    }
+    return result;
+  }
+  return result;
+}
+
+function streamPaymentStatus(txnRetrievalRef, courseInitId, handlers = {}) {
+  if (!txnRetrievalRef) {
+    throw new Error('Missing txnRetrievalRef for NETS status stream.');
+  }
+  const streamUrl = new URL('/api/v1/common/payments/nets/webhook', NETS_API);
+  streamUrl.searchParams.set('txn_retrieval_ref', txnRetrievalRef);
+  if (courseInitId) {
+    streamUrl.searchParams.set('course_init_id', courseInitId);
+  }
+
+  const requestHeaders = {
+    'api-key': process.env.API_KEY,
+    'project-id': process.env.PROJECT_ID,
+    'Accept': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive'
+  };
+
+  const req = https.get(streamUrl, { headers: requestHeaders }, (res) => {
+    let buffer = '';
+    let pendingPayload = '';
+    res.setEncoding('utf8');
+    res.on('data', (chunk) => {
+      buffer += chunk;
+      let newlineIndex;
+      while ((newlineIndex = buffer.indexOf('\n')) >= 0) {
+        let line = buffer.slice(0, newlineIndex);
+        buffer = buffer.slice(newlineIndex + 1);
+        line = line.replace(/\r$/, '');
+        if (!line) {
+          if (pendingPayload) {
+            const payload = parseWebhookPayload(pendingPayload);
+            pendingPayload = '';
+            if (payload && handlers.onPayload) {
+              handlers.onPayload(payload);
+            }
+          }
+          continue;
+        }
+        if (line.startsWith(':')) {
+          continue;
+        }
+        if (line.startsWith('data:')) {
+          pendingPayload += (pendingPayload ? '\n' : '') + line.slice(5).trim();
+        }
+      }
+    });
+    res.on('end', () => {
+      if (pendingPayload && handlers.onPayload) {
+        const payload = parseWebhookPayload(pendingPayload);
+        pendingPayload = '';
+        if (payload) handlers.onPayload(payload);
+      }
+      if (handlers.onEnd) handlers.onEnd();
+    });
+    res.on('error', (err) => {
+      if (handlers.onError) handlers.onError(err);
+    });
+  });
+  req.on('error', (err) => {
+    if (handlers.onError) handlers.onError(err);
+  });
+  return req;
+}
+
+module.exports = {
+  generateQrCode,
+  requestQrCode,
+  NETS_API,
+  getCourseInitIdParam,
+  streamPaymentStatus,
+  interpretPaymentStatus
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
 };

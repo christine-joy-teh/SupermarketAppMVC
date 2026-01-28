@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 <%- include('partials/head', { pageTitle: 'My Orders - Supermarket App' }) %>
 <%- include('partials/navbar', {
   navLinksRight: [
@@ -98,3 +99,106 @@
   <% } %>
 </div>
 <%- include('partials/footer') %>
+=======
+<%- include('partials/head', { pageTitle: 'My Orders - Supermarket App' }) %>
+<%- include('partials/navbar', {
+  navLinksRight: [
+    { href: '/shopping', label: 'Shop' },
+    { href: '/cart', label: 'Cart', badgeValue: cartCount, badgeClass: 'bg-primary' },
+    { href: '/orders/history', label: 'My Orders', active: true },
+    { href: '/logout', label: 'Logout' }
+  ]
+}) %>
+
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <p class="text-uppercase text-muted small mb-1">Orders</p>
+      <h3 class="mb-0">Your past orders</h3>
+      <small class="text-muted">Includes delivery totals and items</small>
+    </div>
+  </div>
+
+  <% if (success && success.length) { %>
+    <div class="alert alert-success"><%= success[0] %></div>
+  <% } %>
+  <% if (error && error.length) { %>
+    <div class="alert alert-danger"><%= error[0] %></div>
+  <% } %>
+
+  <% if (!orders || !orders.length) { %>
+    <div class="alert alert-info">You have no past orders yet.</div>
+    <a class="btn btn-primary" href="/shopping">Start shopping</a>
+  <% } else { %>
+    <div class="accordion" id="ordersAccordion">
+      <% orders.forEach((order, idx) => { %>
+        <div class="accordion-item mb-2">
+          <h2 class="accordion-header" id="heading-<%= idx %>">
+            <button class="accordion-button <%= idx !== 0 ? 'collapsed' : '' %>" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-<%= idx %>">
+              <div class="w-100 d-flex justify-content-between align-items-center">
+                <div>
+                  <div class="fw-semibold">Order #<%= order.id %></div>
+                  <small class="text-muted">Status: <%= order.status %></small>
+                </div>
+                <div class="text-end">
+                  <div>Total: $<%= Number(order.total || 0).toFixed(2) %></div>
+                  <small class="text-muted">Placed: <%= order.createdAt ? new Date(order.createdAt).toLocaleString() : 'n/a' %></small>
+                </div>
+              </div>
+            </button>
+          </h2>
+          <div id="collapse-<%= idx %>" class="accordion-collapse collapse <%= idx === 0 ? 'show' : '' %>" data-bs-parent="#ordersAccordion">
+            <div class="accordion-body">
+              <div class="d-flex justify-content-end mb-3">
+                <a class="btn btn-sm btn-outline-secondary" href="/orders/<%= order.id %>/invoice">View invoice</a>
+                <% const refund = refundsMap && refundsMap[order.id] ? refundsMap[order.id] : null; %>
+                <% const canRefund = (!refund || refund.status === 'denied'); %>
+                <% if (canRefund) { %>
+                  <a class="btn btn-sm btn-outline-primary ms-2" href="/refunds/new?orderId=<%= order.id %>">Request refund</a>
+                <% } %>
+              </div>
+              <p class="mb-2"><strong>Delivery:</strong> <%= order.deliveryMethod || 'delivery' %></p>
+              <p class="mb-2"><strong>Payment method:</strong> <%= order.paymentMethod || 'n/a' %></p>
+              <p class="mb-2"><strong>Payment ID:</strong> <%= order.paymentRef || 'n/a' %></p>
+              <p class="mb-2"><strong>Subtotal:</strong> $<%= Number(order.subtotal || 0).toFixed(2) %></p>
+              <p class="mb-2"><strong>Savings:</strong> $<%= Number(order.savings || 0).toFixed(2) %></p>
+              <p class="mb-3"><strong>Total charged:</strong> $<%= Number(order.total || 0).toFixed(2) %></p>
+              <% if (refund) { %>
+                <p class="mb-3"><strong>Refund status:</strong> <span class="badge bg-secondary text-uppercase"><%= refund.status %></span></p>
+              <% } %>
+              <% const items = Array.isArray(order.items) ? order.items : []; %>
+              <% if (!items.length) { %>
+                <div class="text-muted">No items recorded for this order.</div>
+              <% } else { %>
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle">
+                    <thead>
+                      <tr>
+                        <th>Item</th>
+                        <th class="text-center">Qty</th>
+                        <th class="text-center">Price</th>
+                        <th class="text-center">Line Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <% items.forEach(it => { %>
+                        <tr>
+                          <td><%= it.productName %></td>
+                          <td class="text-center"><%= it.quantity %></td>
+                          <td class="text-center">$<%= Number(it.price || 0).toFixed(2) %></td>
+                          <td class="text-center">$<%= (Number(it.price || 0) * Number(it.quantity || 0)).toFixed(2) %></td>
+                        </tr>
+                      <% }) %>
+                    </tbody>
+                  </table>
+                </div>
+              <% } %>
+            </div>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+  <% } %>
+</div>
+<%- include('partials/footer') %>
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)

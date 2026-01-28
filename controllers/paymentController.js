@@ -3,6 +3,10 @@ const paypalClient = require('../services/paypalClient');
 const netsClient = require('../services/netsClient');
 const UserModel = require('../models/userModel');
 const membershipPlans = require('../models/membershipPlans');
+<<<<<<< HEAD
+=======
+const TransactionLogModel = require('../models/transactionLogModel');
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
 
 function resolveLoyaltyRedeemPoints(req) {
   const rawPoints = req.body && typeof req.body.loyaltyRedeemPoints !== 'undefined'
@@ -100,17 +104,60 @@ async function capturePaypalOrder(req, res) {
       paymentRef: captureId
     });
 
+<<<<<<< HEAD
     req.session.cart = [];
     const userId = orderController.resolveUserId ? orderController.resolveUserId(req.session.user) : null;
+=======
+    const paymentUserId = orderController.resolveUserId ? orderController.resolveUserId(req.session.user) : null;
+    if (paymentUserId) {
+      await TransactionLogModel.createLog({
+        userId: paymentUserId,
+        actionType: 'PAYMENT',
+        previousBalance: null,
+        newBalance: null,
+        referenceId: orderRecord.id
+      });
+    }
+
+    req.session.cart = [];
+    const userId = paymentUserId;
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
     let pointsMsg = '';
     if (userId && summary && summary.loyalty) {
       const pointsSpent = Number(summary.loyalty.pointsSpent) || 0;
       const pointsEarned = orderController.calculateLoyaltyPointsEarned(summary.totalAfter);
       const netDelta = pointsEarned - pointsSpent;
+<<<<<<< HEAD
+=======
+      const prevPoints = await UserModel.getLoyaltyPointsById(userId);
+      const afterSpend = Math.max(0, Number(prevPoints || 0) - pointsSpent);
+      const afterEarn = Math.max(0, afterSpend + pointsEarned);
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
       await UserModel.adjustLoyaltyPoints(userId, netDelta);
       const currentPoints = orderController.getUserPoints(req.session.user);
       const nextPoints = Math.max(0, currentPoints + netDelta);
       syncSessionPoints(req.session.user, nextPoints);
+<<<<<<< HEAD
+=======
+      if (pointsSpent > 0) {
+        await TransactionLogModel.createLog({
+          userId,
+          actionType: 'POINT_SPEND',
+          previousBalance: prevPoints,
+          newBalance: afterSpend,
+          referenceId: orderRecord.id
+        });
+      }
+      if (pointsEarned > 0) {
+        await TransactionLogModel.createLog({
+          userId,
+          actionType: 'POINT_EARN',
+          previousBalance: afterSpend,
+          newBalance: afterEarn,
+          referenceId: orderRecord.id
+        });
+      }
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
       if (pointsEarned > 0 || pointsSpent > 0) {
         pointsMsg = ` You earned ${pointsEarned} points${pointsSpent ? ` and redeemed ${pointsSpent}` : ''}.`;
       }
@@ -154,6 +201,13 @@ async function generateNetsQrCode(req, res) {
     pickupOutlet: req.body && req.body.pickupOutlet ? String(req.body.pickupOutlet) : ''
   };
   req.netsViewData = {
+<<<<<<< HEAD
+=======
+    confirmAction: '/nets/confirm',
+    hideConfirmButton: true,
+    pollStatus: true,
+    cancelUrl: '/payment',
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
     loyaltyRedeemPoints,
     pointsAvailable: loyalty.pointsAvailable
   };
@@ -198,19 +252,64 @@ async function confirmNetsPayment(req, res) {
       paymentMethod: 'nets'
     });
 
+<<<<<<< HEAD
     req.session.cart = [];
     req.session.pendingNetsOrder = null;
 
     const userId = orderController.resolveUserId ? orderController.resolveUserId(req.session.user) : null;
+=======
+    const paymentUserId = orderController.resolveUserId ? orderController.resolveUserId(req.session.user) : null;
+    if (paymentUserId) {
+      await TransactionLogModel.createLog({
+        userId: paymentUserId,
+        actionType: 'PAYMENT',
+        previousBalance: null,
+        newBalance: null,
+        referenceId: orderRecord.id
+      });
+    }
+
+    req.session.cart = [];
+    req.session.pendingNetsOrder = null;
+
+    const userId = paymentUserId;
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
     let pointsMsg = '';
     if (userId && summary && summary.loyalty) {
       const pointsSpent = Number(summary.loyalty.pointsSpent) || 0;
       const pointsEarned = orderController.calculateLoyaltyPointsEarned(summary.totalAfter);
       const netDelta = pointsEarned - pointsSpent;
+<<<<<<< HEAD
+=======
+      const prevPoints = await UserModel.getLoyaltyPointsById(userId);
+      const afterSpend = Math.max(0, Number(prevPoints || 0) - pointsSpent);
+      const afterEarn = Math.max(0, afterSpend + pointsEarned);
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
       await UserModel.adjustLoyaltyPoints(userId, netDelta);
       const currentPoints = orderController.getUserPoints(req.session.user);
       const nextPoints = Math.max(0, currentPoints + netDelta);
       syncSessionPoints(req.session.user, nextPoints);
+<<<<<<< HEAD
+=======
+      if (pointsSpent > 0) {
+        await TransactionLogModel.createLog({
+          userId,
+          actionType: 'POINT_SPEND',
+          previousBalance: prevPoints,
+          newBalance: afterSpend,
+          referenceId: orderRecord.id
+        });
+      }
+      if (pointsEarned > 0) {
+        await TransactionLogModel.createLog({
+          userId,
+          actionType: 'POINT_EARN',
+          previousBalance: afterSpend,
+          newBalance: afterEarn,
+          referenceId: orderRecord.id
+        });
+      }
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
       if (pointsEarned > 0 || pointsSpent > 0) {
         pointsMsg = ` You earned ${pointsEarned} points${pointsSpent ? ` and redeemed ${pointsSpent}` : ''}.`;
       }
@@ -229,7 +328,16 @@ async function confirmNetsPayment(req, res) {
       savingsMsg = ` (you saved $${summary.totalSavings.toFixed(2)}${parts ? `: ${parts}` : ''})`;
     }
     req.flash('success', `NETS payment completed. Order #${orderRecord.id} placed! Total: $${summary.totalAfter.toFixed(2)}${savingsMsg}.${pointsMsg}`);
+<<<<<<< HEAD
     return res.redirect(`/orders/${orderRecord.id}/invoice`);
+=======
+    const redirectUrl = `/orders/${orderRecord.id}/invoice`;
+    const acceptsJson = req.headers && typeof req.headers.accept === 'string' && req.headers.accept.includes('application/json');
+    if (acceptsJson || req.xhr) {
+      return res.json({ success: true, redirect: redirectUrl });
+    }
+    return res.redirect(redirectUrl);
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
   } catch (err) {
     console.error('NETS confirm error:', err.message);
     req.flash('error', 'Unable to confirm NETS payment right now.');
@@ -237,6 +345,89 @@ async function confirmNetsPayment(req, res) {
   }
 }
 
+<<<<<<< HEAD
+=======
+function streamNetsPaymentStatus(req, res) {
+  const txnRetrievalRef = req.params.txnRetrievalRef;
+  if (!txnRetrievalRef) {
+    return res.status(400).send('Missing txnRetrievalRef.');
+  }
+  const courseInitId = typeof netsClient.getCourseInitIdParam === 'function'
+    ? netsClient.getCourseInitIdParam()
+    : '';
+  res.set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive'
+  });
+  if (typeof res.flushHeaders === 'function') {
+    res.flushHeaders();
+  }
+  let finished = false;
+  let streamRequest = null;
+
+  const sendEvent = (payload) => {
+    if (finished) return;
+    try {
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    } catch (writeErr) {
+      console.error('Failed to send NETS SSE payload:', writeErr.message);
+      cleanup();
+    }
+  };
+
+  const cleanup = () => {
+    if (finished) return;
+    finished = true;
+    if (streamRequest && !streamRequest.destroyed) {
+      streamRequest.destroy();
+    }
+    if (timeoutId) clearTimeout(timeoutId);
+    if (!res.writableEnded) {
+      try {
+        res.end();
+      } catch (endErr) {
+        console.error('NETS SSE cleanup error:', endErr.message);
+      }
+    }
+  };
+
+  const timeoutMs = Number(process.env.NETS_STATUS_STREAM_TIMEOUT_MS) || (4 * 60 * 1000);
+  const timeoutId = setTimeout(() => {
+    sendEvent({ error: 'NETS status timeout. Please confirm payment manually.' });
+    cleanup();
+  }, timeoutMs);
+
+  streamRequest = netsClient.streamPaymentStatus(txnRetrievalRef, courseInitId, {
+    onPayload: (payload) => {
+      const status = netsClient.interpretPaymentStatus(payload);
+      if (!status) {
+        return;
+      }
+      if (status.success) {
+        sendEvent({ success: true, status });
+        cleanup();
+      } else if (status.fail) {
+        sendEvent({ fail: true, status });
+        cleanup();
+      }
+    },
+    onError: (err) => {
+      sendEvent({ error: err && err.message ? err.message : 'Unable to receive NETS status updates.' });
+      cleanup();
+    },
+    onEnd: () => {
+      if (!finished) {
+        sendEvent({ error: 'NETS status stream closed before confirmation.' });
+        cleanup();
+      }
+    }
+  });
+
+  req.on('close', cleanup);
+}
+
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
 function resolveMembershipPlan(planRaw) {
   const plan = membershipPlans.getMembershipPlan(planRaw);
   if (!plan) {
@@ -289,6 +480,16 @@ async function captureMembershipPaypalOrder(req, res) {
 
     await UserModel.update(userId, { plan: plan.key });
     if (req.session.user) req.session.user.plan = plan.key;
+<<<<<<< HEAD
+=======
+    await TransactionLogModel.createLog({
+      userId,
+      actionType: 'PAYMENT',
+      previousBalance: null,
+      newBalance: null,
+      referenceId: null
+    });
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
     req.flash('success', `Your membership plan has been updated to ${plan.key.toUpperCase()}.`);
     return res.json({ success: true, redirect: `/membership/payment?plan=${plan.key}&confirm=1` });
   } catch (err) {
@@ -343,6 +544,16 @@ async function confirmMembershipNetsPayment(req, res) {
     await UserModel.update(userId, { plan: plan.key });
     if (req.session.user) req.session.user.plan = plan.key;
     req.session.pendingMembershipPayment = null;
+<<<<<<< HEAD
+=======
+    await TransactionLogModel.createLog({
+      userId,
+      actionType: 'PAYMENT',
+      previousBalance: null,
+      newBalance: null,
+      referenceId: null
+    });
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
     req.flash('success', `Your membership plan has been updated to ${plan.key.toUpperCase()}.`);
     return res.redirect(`/membership/payment?plan=${plan.key}&confirm=1`);
   } catch (err) {
@@ -352,6 +563,58 @@ async function confirmMembershipNetsPayment(req, res) {
   }
 }
 
+<<<<<<< HEAD
+=======
+async function payMembershipWithWallet(req, res) {
+  const { plan, error } = resolveMembershipPlan(req.body && req.body.plan);
+  if (error) {
+    req.flash('error', error);
+    return res.redirect('/membership/payment');
+  }
+  if (!membershipPlans.isPaidPlan(plan)) {
+    req.flash('error', 'No payment required for Basic plan.');
+    return res.redirect(`/membership/payment?plan=${plan.key}&confirm=1`);
+  }
+
+  try {
+    const userId = orderController.resolveUserId ? orderController.resolveUserId(req.session.user) : null;
+    if (!userId) {
+      req.flash('error', 'User not found.');
+      return res.redirect('/membership/payment');
+    }
+
+    const amount = Number(plan.amount) || 0;
+    const currentBalance = orderController.getUserWalletBalance
+      ? orderController.getUserWalletBalance(req.session.user)
+      : 0;
+    if (currentBalance < amount) {
+      req.flash('error', 'Insufficient wallet balance.');
+      return res.redirect(`/membership/payment?plan=${plan.key}&confirm=1`);
+    }
+
+    await UserModel.adjustWalletBalance(userId, -amount);
+    const nextBalance = Math.max(0, currentBalance - amount);
+    syncSessionWalletBalance(req.session.user, nextBalance);
+    await TransactionLogModel.createLog({
+      userId,
+      actionType: 'PAYMENT',
+      previousBalance: currentBalance,
+      newBalance: nextBalance,
+      referenceId: null
+    });
+
+    await UserModel.update(userId, { plan: plan.key });
+    if (req.session.user) req.session.user.plan = plan.key;
+    req.flash('success', `Your membership plan has been updated to ${plan.key.toUpperCase()}.`);
+    return res.redirect(`/membership/payment?plan=${plan.key}&confirm=1`);
+  } catch (err) {
+    console.error('Wallet membership payment error:', err.message);
+    req.flash('error', 'Unable to process wallet payment right now.');
+    return res.redirect('/membership/payment');
+  }
+}
+
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
 function renderWalletTopupPage(req, res) {
   const walletBalance = orderController.getUserWalletBalance
     ? orderController.getUserWalletBalance(req.session.user)
@@ -411,6 +674,16 @@ async function captureWalletTopupPaypalOrder(req, res) {
     const currentBalance = orderController.getUserWalletBalance(req.session.user);
     const nextBalance = Math.max(0, currentBalance + amount);
     syncSessionWalletBalance(req.session.user, nextBalance);
+<<<<<<< HEAD
+=======
+    await TransactionLogModel.createLog({
+      userId,
+      actionType: 'PAYMENT',
+      previousBalance: currentBalance,
+      newBalance: nextBalance,
+      referenceId: null
+    });
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
     req.flash('success', `Wallet topped up by $${amount.toFixed(2)}.`);
     return res.json({ success: true, redirect: '/wallet/topup' });
   } catch (err) {
@@ -463,6 +736,16 @@ async function confirmWalletTopupNetsPayment(req, res) {
     const nextBalance = Math.max(0, currentBalance + amount);
     syncSessionWalletBalance(req.session.user, nextBalance);
     req.session.pendingWalletTopup = null;
+<<<<<<< HEAD
+=======
+    await TransactionLogModel.createLog({
+      userId,
+      actionType: 'PAYMENT',
+      previousBalance: currentBalance,
+      newBalance: nextBalance,
+      referenceId: null
+    });
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
     req.flash('success', `Wallet topped up by $${amount.toFixed(2)}.`);
     return res.redirect('/wallet/topup');
   } catch (err) {
@@ -515,15 +798,52 @@ async function payWithWallet(req, res) {
     await UserModel.adjustWalletBalance(userId, -totalDue);
     const nextBalance = Math.max(0, currentBalance - totalDue);
     syncSessionWalletBalance(req.session.user, nextBalance);
+<<<<<<< HEAD
+=======
+    await TransactionLogModel.createLog({
+      userId,
+      actionType: 'PAYMENT',
+      previousBalance: currentBalance,
+      newBalance: nextBalance,
+      referenceId: orderRecord.id
+    });
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
 
     req.session.cart = [];
     const pointsSpent = Number(summary.loyalty && summary.loyalty.pointsSpent) || 0;
     const pointsEarned = orderController.calculateLoyaltyPointsEarned(summary.totalAfter);
     const netDelta = pointsEarned - pointsSpent;
+<<<<<<< HEAD
+=======
+    const prevPoints = await UserModel.getLoyaltyPointsById(userId);
+    const afterSpend = Math.max(0, Number(prevPoints || 0) - pointsSpent);
+    const afterEarn = Math.max(0, afterSpend + pointsEarned);
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
     await UserModel.adjustLoyaltyPoints(userId, netDelta);
     const currentPoints = orderController.getUserPoints(req.session.user);
     const nextPoints = Math.max(0, currentPoints + netDelta);
     syncSessionPoints(req.session.user, nextPoints);
+<<<<<<< HEAD
+=======
+    if (pointsSpent > 0) {
+      await TransactionLogModel.createLog({
+        userId,
+        actionType: 'POINT_SPEND',
+        previousBalance: prevPoints,
+        newBalance: afterSpend,
+        referenceId: orderRecord.id
+      });
+    }
+    if (pointsEarned > 0) {
+      await TransactionLogModel.createLog({
+        userId,
+        actionType: 'POINT_EARN',
+        previousBalance: afterSpend,
+        newBalance: afterEarn,
+        referenceId: orderRecord.id
+      });
+    }
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
 
     let savingsMsg = '';
     if (summary.totalSavings > 0) {
@@ -553,11 +873,19 @@ module.exports = {
   capturePaypalOrder,
   generateNetsQrCode,
   confirmNetsPayment,
+<<<<<<< HEAD
+=======
+  streamNetsPaymentStatus,
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
   renderWalletTopupPage,
   createMembershipPaypalOrder,
   captureMembershipPaypalOrder,
   generateMembershipNetsQrCode,
   confirmMembershipNetsPayment,
+<<<<<<< HEAD
+=======
+  payMembershipWithWallet,
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
   createWalletTopupPaypalOrder,
   captureWalletTopupPaypalOrder,
   generateWalletTopupNetsQrCode,

@@ -5,6 +5,7 @@
     { href: '/login', label: 'Login' }
   ]
 }) %>
+<<<<<<< HEAD
     <div class="container">
       <div class="row justify-content-center">
         <div class="col-md-10 col-lg-9">
@@ -43,10 +44,51 @@
                     <input type="hidden" name="plan" id="selected-plan" value="<%= plan ? plan : '' %>">
 
                     <div class="mb-3">
+=======
+    <div class="container">
+      <div class="row justify-content-center">
+        <div class="col-md-10 col-lg-9">
+          <div class="card register-card mt-5 shadow-sm">
+            <div class="card-body">
+              <h3 class="card-title mb-1">Create an account</h3>
+              <p class="text-muted mb-3">Create your account and start shopping. Choose a plan on the right (optional).</p>
+
+              <% if (success && success.length > 0) { %>
+                <div class="alert alert-success">
+                  <% success.forEach(function(msg){ %>
+                    <div><%= msg %></div>
+                  <% }) %>
+                </div>
+              <% } %>
+              <% if (error && error.length > 0) { %>
+                <div class="alert alert-danger">
+                  <% error.forEach(function(msg){ %>
+                    <div><%= msg %></div>
+                  <% }) %>
+                </div>
+              <% } %>
+
+              <% if (messages && messages.length > 0) { %>
+                <div class="alert alert-danger">
+                  <% messages.forEach(function(message) { %>
+                    <p class="mb-0"><%= message %></p>
+                  <% }); %>
+                </div>
+              <% } %>
+
+
+              <div class="row gx-4">
+                <div class="col-md-8">
+                  <form action="/register" method="POST" class="mt-2 needs-validation" novalidate>
+                    <input type="hidden" name="plan" id="selected-plan" value="<%= plan ? plan : '' %>">
+
+                    <div class="mb-3">
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
                       <label for="username" class="form-label">Username</label>
                       <input type="text" id="username" name="username" class="form-control" required autofocus value="<%= formData && formData.username ? formData.username : '' %>">
                       <div class="invalid-feedback">Please enter a username.</div>
                     </div>
+<<<<<<< HEAD
 
                     <div class="mb-3">
                       <label for="email" class="form-label">Email</label>
@@ -81,6 +123,42 @@
                       <div class="invalid-feedback">Please enter a contact number.</div>
                     </div>
 
+=======
+
+                    <div class="mb-3">
+                      <label for="email" class="form-label">Email</label>
+                      <input type="email" id="email" name="email" class="form-control" required value="<%= formData && formData.email ? formData.email : '' %>">
+                      <div class="invalid-feedback">Please provide a valid email.</div>
+                    </div>
+
+                    <div class="mb-3">
+                      <label for="password" class="form-label">Password</label>
+                      <div class="d-flex">
+                        <input type="password" id="password" name="password" class="form-control me-2" required aria-describedby="pwd-help">
+                        <button type="button" id="togglePwd" class="btn btn-outline-secondary">Show</button>
+                      </div>
+                      <div class="invalid-feedback">Please provide a password (min 8 chars).</div>
+                      <div class="mt-2">
+                        <div class="progress" style="height:8px">
+                          <div id="pwd-strength" class="progress-bar" role="progressbar" style="width:0%"></div>
+                        </div>
+                        <small id="pwd-help" class="text-muted">Use at least 8 characters, mix letters & numbers for a stronger password.</small>
+                      </div>
+                    </div>
+
+                    <div class="mb-3">
+                      <label for="address" class="form-label">Address</label>
+                      <input type="text" id="address" name="address" class="form-control" required value="<%= formData && formData.address ? formData.address : '' %>">
+                      <div class="invalid-feedback">Please enter your address.</div>
+                    </div>
+
+                    <div class="mb-3">
+                      <label for="contact" class="form-label">Contact Number</label>
+                      <input type="text" id="contact" name="contact" class="form-control" required value="<%= formData && formData.contact ? formData.contact : '' %>">
+                      <div class="invalid-feedback">Please enter a contact number.</div>
+                    </div>
+
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
                     <div class="form-check mb-3">
                       <input class="form-check-input" type="checkbox" value="1" id="agree" required>
                       <label class="form-check-label small" for="agree">I agree to the <a href="#">terms & conditions</a>.</label>
@@ -90,12 +168,21 @@
                     <div class="d-grid">
                       <button type="submit" class="btn btn-primary btn-lg">Create account</button>
                     </div>
+<<<<<<< HEAD
                   </form>
                 </div>
 
                 <div class="col-md-4">
                   <div class="card p-3">
                     <h5 class="mb-2">Selected plan</h5>
+=======
+                  </form>
+                </div>
+
+                <div class="col-md-4">
+                  <div class="card p-3">
+                    <h5 class="mb-2">Selected plan</h5>
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
                     <div id="selected-plan-card" class="plan-card plan-selected mb-3" style="width:100%">
                       <div class="plan-name">Basic</div>
                       <div class="plan-price">Free</div>
@@ -104,6 +191,7 @@
                     </div>
 
                     <div id="plan-help" class="text-muted small mb-2">Default plan is BASIC. You can upgrade to Silver/Gold later.</div>
+<<<<<<< HEAD
 
                     <hr>
                     <h6 class="mb-2">Change plan</h6>
@@ -132,22 +220,65 @@
               </div>
               <script>
                 (function(){
+=======
+
+                    <hr>
+                    <h6 class="mb-2">Change plan</h6>
+                    <div class="plan-row">
+                      <div class="plan-card" data-plan="basic">
+                        <div class="plan-name">Basic</div>
+                        <div class="plan-price">Free</div>
+                      </div>
+                      <div class="plan-card plan-selected" data-plan="silver">
+                        <div class="recommended">Recommended</div>
+                        <div class="plan-name">Silver</div>
+                        <div class="plan-price">$4.99 / mo</div>
+                      </div>
+                      <div class="plan-card bestseller" data-plan="gold">
+                        <div class="plan-name">Gold</div>
+                        <div class="plan-price">$9.99 / mo</div>
+                      </div>
+                    </div>
+                    <div class="mt-3 small text-muted">You can change or cancel your plan anytime from your account settings.</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mt-3 text-center">
+                Already have an account? <a href="/login">Sign in</a>
+              </div>
+              <script>
+                (function(){
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
                   const hidden = document.getElementById('selected-plan');
                   const cards = document.querySelectorAll('.plan-row .plan-card');
                   const selectedCardContainer = document.getElementById('selected-plan-card');
                   const help = document.getElementById('plan-help');
+<<<<<<< HEAD
 
+=======
+
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
                   const planInfo = {
                     basic: {name:'Basic', price:'Free', features:'Standard checkout', badge:'Default'},
                     silver: {name:'Silver', price:'$4.99 / mo', features:'Free delivery over $50 · 5% off selected items', badge:'Popular'},
                     gold: {name:'Gold', price:'$9.99 / mo', features:'Free delivery · 10% off storewide · Priority support', badge:'Best value'}
                   };
+<<<<<<< HEAD
 
                   function renderSelected(plan){
                     const info = planInfo[plan] || planInfo['silver'];
                     selectedCardContainer.innerHTML = `\n                      <div class="plan-name">${info.name}</div>\n                      <div class="plan-price">${info.price}</div>\n                      <div class="plan-features">${info.features}</div>\n                      <div class="plan-badge">${info.badge}</div>\n                    `;
                   }
 
+=======
+
+                  function renderSelected(plan){
+                    const info = planInfo[plan] || planInfo['silver'];
+                    selectedCardContainer.innerHTML = `\n                      <div class="plan-name">${info.name}</div>\n                      <div class="plan-price">${info.price}</div>\n                      <div class="plan-features">${info.features}</div>\n                      <div class="plan-badge">${info.badge}</div>\n                    `;
+                  }
+
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
                   function selectPlan(plan){
                     // toggle selection visually across selectable plan cards only
                     document.querySelectorAll('.plan-row .plan-card').forEach(c=> c.classList.toggle('plan-selected', c.dataset.plan === plan));
@@ -156,6 +287,7 @@
                     else help.textContent = 'Select a plan to apply perks to your account. You can skip and choose later.';
                     renderSelected(plan);
                   }
+<<<<<<< HEAD
 
                   cards.forEach(c=> c.addEventListener('click', ()=> selectPlan(c.dataset.plan)));
                   // preselect from server-provided query param or default to basic
@@ -212,5 +344,63 @@
           </div>
         </div>
       </div>
+=======
+
+                  cards.forEach(c=> c.addEventListener('click', ()=> selectPlan(c.dataset.plan)));
+                  // preselect from server-provided query param or default to basic
+                  const initial = '<%= typeof plan !== "undefined" ? plan : "" %>';
+                  const toSelect = initial || 'basic';
+                  if(toSelect) selectPlan(toSelect);
+
+                  // Password toggle and strength meter
+                  const pwd = document.getElementById('password');
+                  const toggle = document.getElementById('togglePwd');
+                  const strengthBar = document.getElementById('pwd-strength');
+                  const pwdHelp = document.getElementById('pwd-help');
+
+                  function scorePassword(p){
+                    let score=0;
+                    if(!p) return 0;
+                    if(p.length>=8) score+=30;
+                    if(/[A-Z]/.test(p)) score+=20;
+                    if(/[0-9]/.test(p)) score+=20;
+                    if(/[^A-Za-z0-9]/.test(p)) score+=30;
+                    return Math.min(100, score);
+                  }
+
+                  function updateStrength(){
+                    const s = scorePassword(pwd.value);
+                    strengthBar.style.width = s + '%';
+                    strengthBar.className = 'progress-bar';
+                    if(s < 40){ strengthBar.classList.add('bg-danger'); pwdHelp.textContent = 'Weak — try a longer password with numbers/symbols.' }
+                    else if(s < 70){ strengthBar.classList.add('bg-warning'); pwdHelp.textContent = 'Fair — add more character types.' }
+                    else { strengthBar.classList.add('bg-success'); pwdHelp.textContent = 'Strong password.' }
+                  }
+
+                  if(pwd){ pwd.addEventListener('input', updateStrength); updateStrength(); }
+                  if(toggle && pwd){ toggle.addEventListener('click', ()=> { if(pwd.type === 'password'){ pwd.type='text'; toggle.textContent='Hide'; } else { pwd.type='password'; toggle.textContent='Show'; } }); }
+
+                  // Bootstrap client-side validation
+                  (function () {
+                    'use strict'
+                    const forms = document.querySelectorAll('.needs-validation')
+                    Array.prototype.slice.call(forms).forEach(function (form) {
+                      form.addEventListener('submit', function (event) {
+                        if (!form.checkValidity()) {
+                          event.preventDefault()
+                          event.stopPropagation()
+                        }
+                        form.classList.add('was-validated')
+                      }, false)
+                    })
+                  })()
+
+                })();
+              </script>
+            </div>
+          </div>
+        </div>
+      </div>
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
     </div>
 <%- include('partials/footer') %>

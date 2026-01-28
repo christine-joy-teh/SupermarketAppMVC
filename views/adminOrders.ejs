@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 <%- include('partials/head', { pageTitle: 'Manage Orders - Supermarket App' }) %>
 <%- include('partials/navbar', {
   navLinksLeft: [
@@ -175,3 +176,201 @@
   })();
 </script>
 <%- include('partials/footer') %>
+=======
+<%- include('partials/head', { pageTitle: 'Manage Orders - Supermarket App' }) %>
+<%- include('partials/navbar', {
+  navLinksLeft: [
+    { href: '/inventory', label: 'Inventory' },
+    { href: '/addProduct', label: 'Add Product' },
+    { href: '/admin/orders', label: 'Orders', active: true },
+    { href: '/admin/refunds', label: 'Refunds' },
+    { href: '/admin/transactions', label: 'Transactions' },
+    { href: '/admin/users', label: 'Users' },
+    { href: '/admin/promotion', label: 'Promotion' }
+  ],
+  navLinksRight: [
+    { href: '/logout', label: 'Logout' }
+  ]
+}) %>
+
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <p class="text-uppercase text-muted small mb-1">Admin</p>
+      <h3 class="mb-0">Delivery Orders</h3>
+      <small class="text-muted">Review and update status</small>
+    </div>
+  </div>
+
+  <% if (success && success.length) { %>
+    <div class="alert alert-success"><%= success[0] %></div>
+  <% } %>
+  <% if (error && error.length) { %>
+    <div class="alert alert-danger"><%= error[0] %></div>
+  <% } %>
+
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>User</th>
+          <th>Total</th>
+          <th>Savings</th>
+          <th>Status</th>
+          <th>Delivery</th>
+          <th>Created</th>
+          <th>Invoice</th>
+          <th class="text-center">Update</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% if (orders && orders.length) { %>
+          <% orders.forEach(o => { %>
+            <tr>
+              <td>
+                <a href="#" class="badge bg-info text-dark text-decoration-none order-items-link"
+                   data-bs-toggle="modal"
+                   data-bs-target="#itemsModal"
+                   data-order-id="<%= o.id %>"
+                   data-items="<%- encodeURIComponent(JSON.stringify(o.items || [])) %>">
+                  #<%= o.id %>
+                </a>
+              </td>
+              <td>
+                <% if (o.userName || o.userEmail) { %>
+                  <div class="d-flex flex-column">
+                    <span class="fw-semibold"><%= o.userName || 'Unknown user' %></span>
+                    <small class="text-muted"><%= o.userEmail || 'No email' %></small>
+                  </div>
+                <% } else { %>
+                  <span class="text-muted">User ID: <%= o.userId || o.user_id || 'N/A' %></span>
+                <% } %>
+              </td>
+              <td>$<%= Number(o.total || 0).toFixed(2) %></td>
+              <td>$<%= Number(o.savings || 0).toFixed(2) %></td>
+              <td><span class="badge bg-secondary text-uppercase"><%= o.status %></span></td>
+              <td><span class="badge bg-light text-dark text-uppercase"><%= o.deliveryMethod || 'delivery' %></span></td>
+              <td><%= o.createdAt ? new Date(o.createdAt).toLocaleString() : '' %></td>
+              <td>
+                <a href="/orders/<%= o.id %>/invoice" class="btn btn-sm btn-outline-secondary" target="_blank">Invoice</a>
+              </td>
+              <td class="text-center">
+                <form action="/admin/orders/<%= o.id %>/status" method="POST" class="d-flex gap-2 justify-content-center">
+                  <select name="status" class="form-select form-select-sm" style="max-width: 150px;">
+                    <option value="pending" <%= o.status === 'pending' ? 'selected' : '' %>>Pending</option>
+                    <option value="processing" <%= o.status === 'processing' ? 'selected' : '' %>>Processing</option>
+                    <option value="completed" <%= o.status === 'completed' ? 'selected' : '' %>>Completed</option>
+                  </select>
+                  <button type="submit" class="btn btn-sm btn-outline-primary">Save</button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        <% } else { %>
+          <tr>
+            <td colspan="9" class="text-center text-muted">No orders found.</td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+
+  <% if (pagination && pagination.totalPages > 1) { %>
+    <nav class="mt-3" aria-label="Orders pagination">
+      <ul class="pagination justify-content-center mb-0">
+        <li class="page-item <%= pagination.page <= 1 ? 'disabled' : '' %>">
+          <a class="page-link" href="/admin/orders?page=<%= pagination.page - 1 %>">Previous</a>
+        </li>
+        <% for (let p = 1; p <= pagination.totalPages; p++) { %>
+          <li class="page-item <%= p === pagination.page ? 'active' : '' %>">
+            <a class="page-link" href="/admin/orders?page=<%= p %>"><%= p %></a>
+          </li>
+        <% } %>
+        <li class="page-item <%= pagination.page >= pagination.totalPages ? 'disabled' : '' %>">
+          <a class="page-link" href="/admin/orders?page=<%= pagination.page + 1 %>">Next</a>
+        </li>
+      </ul>
+    </nav>
+  <% } %>
+</div>
+
+<!-- Items Modal -->
+<div class="modal fade" id="itemsModal" tabindex="-1" aria-labelledby="itemsModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="itemsModalLabel">Order items</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0" id="itemsTable">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th class="text-center">Qty</th>
+                <th class="text-center">Price</th>
+                <th class="text-end">Line total</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="text-muted">
+                <td colspan="4" class="text-center">No items</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Populate the modal with order items when an ID badge is clicked
+  (function() {
+    const modalEl = document.getElementById('itemsModal');
+    if (!modalEl) return;
+    const tableBody = modalEl.querySelector('#itemsTable tbody');
+    const titleEl = document.getElementById('itemsModalLabel');
+
+    document.querySelectorAll('.order-items-link').forEach(link => {
+      link.addEventListener('click', () => {
+        const orderId = link.getAttribute('data-order-id');
+        titleEl.textContent = `Order #${orderId} items`;
+
+        let items = [];
+        try {
+          const decoded = decodeURIComponent(link.getAttribute('data-items') || '[]');
+          items = JSON.parse(decoded);
+        } catch (err) {
+          items = [];
+        }
+
+        tableBody.innerHTML = '';
+        if (!Array.isArray(items) || !items.length) {
+          tableBody.innerHTML = '<tr class="text-muted"><td colspan="4" class="text-center">No items recorded</td></tr>';
+          return;
+        }
+
+        items.forEach(it => {
+          const qty = Number(it.quantity || 0);
+          const price = Number(it.price || 0);
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${(it.productName || 'Item')}</td>
+            <td class="text-center">${qty}</td>
+            <td class="text-center">$${price.toFixed(2)}</td>
+            <td class="text-end fw-semibold">$${(qty * price).toFixed(2)}</td>
+          `;
+          tableBody.appendChild(row);
+        });
+      });
+    });
+  })();
+</script>
+<%- include('partials/footer') %>
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
