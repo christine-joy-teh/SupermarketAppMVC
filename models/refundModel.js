@@ -10,6 +10,7 @@ function getDbName() {
 }
 
 let refundTableReady;
+let refundItemsTableReady;
 
 async function ensureRefundsTable() {
   await db.query(`
@@ -19,6 +20,8 @@ async function ensureRefundsTable() {
       userId INT NOT NULL,
       reason TEXT NOT NULL,
       documentPath VARCHAR(255) DEFAULT NULL,
+      total_amount DECIMAL(10,2) DEFAULT 0,
+      destination VARCHAR(30) DEFAULT 'E_WALLET',
       status VARCHAR(20) DEFAULT 'pending',
       adminNote TEXT DEFAULT NULL,
       createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -31,7 +34,27 @@ async function ensureRefundsTable() {
     `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'refunds'`,
     [dbName]
   );
-  return rows.map(r => r.COLUMN_NAME);
+  const columns = rows.map(r => r.COLUMN_NAME);
+
+  async function ensureColumn(column, ddl) {
+    if (columns.includes(column)) return;
+    try {
+      await db.query(`ALTER TABLE refunds ADD COLUMN ${ddl}`);
+    } catch (err) {
+      if (err.code !== 'ER_DUP_FIELDNAME') {
+        console.warn(`refunds table migration (${column}) skipped:`, err.message);
+      }
+    }
+  }
+
+  await ensureColumn('total_amount', 'total_amount DECIMAL(10,2) DEFAULT 0');
+  await ensureColumn('destination', "destination VARCHAR(30) DEFAULT 'E_WALLET'");
+
+  const [finalRows] = await db.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'refunds'`,
+    [dbName]
+  );
+  return finalRows.map(r => r.COLUMN_NAME);
 }
 
 async function tableReady() {
@@ -43,11 +66,34 @@ async function tableReady() {
   return refundTableReady;
 }
 
-async function createRefund({ orderId, userId, reason, documentPath }) {
+async function ensureRefundItemsTable() {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS refund_items (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      refund_id INT NOT NULL,
+      order_item_id INT NOT NULL,
+      refund_qty INT NOT NULL,
+      refund_amount DECIMAL(10,2) NOT NULL,
+      createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+  `);
+}
+
+async function refundItemsReady() {
+  if (!refundItemsTableReady) {
+    refundItemsTableReady = ensureRefundItemsTable().catch(err => {
+      console.error('Failed to ensure refund_items table:', err.message);
+    });
+  }
+  return refundItemsTableReady;
+}
+
+async function createRefund({ orderId, userId, reason, documentPath, totalAmount = 0, destination = 'E_WALLET' }) {
   await tableReady();
   const [result] = await db.query(
-    'INSERT INTO refunds (orderId, userId, reason, documentPath, status) VALUES (?, ?, ?, ?, ?)',
-    [orderId, userId, reason, documentPath || null, 'pending']
+    'INSERT INTO refunds (orderId, userId, reason, documentPath, total_amount, destination, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [orderId, userId, reason, documentPath || null, totalAmount || 0, destination || 'E_WALLET', 'pending']
   );
   return result.insertId;
 }
@@ -125,6 +171,46 @@ async function updateStatus(id, { status, adminNote }) {
   return result;
 }
 
+async function createRefundItems(refundId, items = []) {
+  await refundItemsReady();
+  const rows = Array.isArray(items) ? items : [];
+  for (const item of rows) {
+    await db.query(
+      'INSERT INTO refund_items (refund_id, order_item_id, refund_qty, refund_amount) VALUES (?, ?, ?, ?)',
+      [refundId, item.orderItemId, item.refundQty, item.refundAmount]
+    );
+  }
+}
+
+async function getRefundItemsByRefundId(refundId) {
+  await refundItemsReady();
+  const [rows] = await db.query(
+    'SELECT * FROM refund_items WHERE refund_id = ? ORDER BY id ASC',
+    [refundId]
+  );
+  return rows;
+}
+
+async function getApprovedRefundedQtyByOrderItemIds(orderItemIds = []) {
+  await refundItemsReady();
+  const ids = Array.isArray(orderItemIds) ? orderItemIds.filter(Boolean) : [];
+  if (!ids.length) return {};
+  const [rows] = await db.query(
+    `
+    SELECT ri.order_item_id AS orderItemId, SUM(ri.refund_qty) AS refundedQty
+    FROM refund_items ri
+    INNER JOIN refunds r ON r.id = ri.refund_id
+    WHERE ri.order_item_id IN (?) AND r.status = 'approved'
+    GROUP BY ri.order_item_id
+    `,
+    [ids]
+  );
+  return rows.reduce((acc, row) => {
+    acc[row.orderItemId] = Number(row.refundedQty) || 0;
+    return acc;
+  }, {});
+}
+
 module.exports = {
   createRefund,
   getById,
@@ -134,5 +220,8 @@ module.exports = {
   listAll,
   listAllPaged,
   countAll,
-  updateStatus
+  updateStatus,
+  createRefundItems,
+  getRefundItemsByRefundId,
+  getApprovedRefundedQtyByOrderItemIds
 };

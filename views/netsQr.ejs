@@ -86,7 +86,8 @@
         if (statusEl) {
           statusEl.textContent = 'Payment confirmed. Finalising order...';
         }
-        fetch('/nets/confirm', {
+        var confirmAction = "<%= (typeof autoConfirmAction !== 'undefined' && autoConfirmAction) ? autoConfirmAction : ((typeof confirmAction !== 'undefined' && confirmAction) ? confirmAction : '/nets/confirm') %>";
+        fetch(confirmAction, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

@@ -56,7 +56,7 @@
                   <small class="text-muted"><%= r.userEmail || 'No email' %></small>
                 </div>
               </td>
-              <td>$<%= Number(r.orderTotal || 0).toFixed(2) %></td>
+              <td>$<%= Number((typeof r.total_amount !== 'undefined' ? r.total_amount : r.orderTotal) || 0).toFixed(2) %></td>
               <td style="max-width: 240px;"><%= r.reason %></td>
               <td>
                 <% if (r.documentPath) { %>

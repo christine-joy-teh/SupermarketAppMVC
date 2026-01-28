@@ -37,15 +37,17 @@
           <th>Time</th>
           <th>User</th>
           <th>Action</th>
+          <th>Alert</th>
           <th class="text-end">Prev</th>
           <th class="text-end">New</th>
           <th>Reference</th>
+          <th class="text-center">Admin Action</th>
         </tr>
       </thead>
       <tbody>
         <% if (logs && logs.length) { %>
           <% logs.forEach(log => { %>
-            <tr>
+            <tr class="<%= log.suspicious_flag ? 'table-warning' : '' %>">
               <td><%= log.created_at ? new Date(log.created_at).toLocaleString() : 'n/a' %></td>
               <td>
                 <div class="d-flex flex-column">
@@ -54,14 +56,36 @@
                 </div>
               </td>
               <td><span class="badge bg-secondary text-uppercase"><%= log.action_type %></span></td>
-              <td class="text-end"><%= log.previous_balance !== null ? Number(log.previous_balance).toFixed(2) : '—' %></td>
-              <td class="text-end"><%= log.new_balance !== null ? Number(log.new_balance).toFixed(2) : '—' %></td>
-              <td><%= log.reference_id !== null ? log.reference_id : '—' %></td>
+              <td>
+                <% if (log.suspicious_flag) { %>
+                  <span class="badge bg-warning text-dark">Suspicious</span>
+                  <div class="small text-muted"><%= log.suspicious_reason || 'Unusual activity' %></div>
+                <% } else { %>
+                  <span class="text-muted">-</span>
+                <% } %>
+              </td>
+              <td class="text-end"><%= log.previous_balance !== null ? Number(log.previous_balance).toFixed(2) : '-' %></td>
+              <td class="text-end"><%= log.new_balance !== null ? Number(log.new_balance).toFixed(2) : '-' %></td>
+              <td><%= log.reference_id !== null ? log.reference_id : '-' %></td>
+              <td class="text-center">
+                <% if (log.suspicious_flag) { %>
+                  <% if (log.userDisabled) { %>
+                    <span class="badge bg-secondary">Disabled</span>
+                  <% } else { %>
+                    <form action="/admin/users/<%= log.user_id %>/disable" method="POST" class="d-inline">
+                      <input type="hidden" name="disabled" value="1">
+                      <button type="submit" class="btn btn-sm btn-outline-danger">Disable</button>
+                    </form>
+                  <% } %>
+                <% } else { %>
+                  <span class="text-muted">-</span>
+                <% } %>
+              </td>
             </tr>
           <% }) %>
         <% } else { %>
           <tr>
-            <td colspan="6" class="text-center text-muted">No transaction logs found.</td>
+            <td colspan="8" class="text-center text-muted">No transaction logs found.</td>
           </tr>
         <% } %>
       </tbody>
@@ -88,3 +112,5 @@
 </div>
 
 <%- include('partials/footer') %>
+
+

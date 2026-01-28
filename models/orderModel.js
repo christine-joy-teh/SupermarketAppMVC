@@ -2,6 +2,7 @@ const rawDb = require('../db');
 const db = rawDb.promise ? rawDb.promise() : rawDb;
 
 let columnCache;
+let orderItemsReady;
 
 const tableReady = ensureOrdersTable().then(cols => {
   columnCache = cols;
@@ -12,6 +13,9 @@ const tableReady = ensureOrdersTable().then(cols => {
 
 const cartTableReady = ensureCartTable().catch(err => {
   console.error('Failed to ensure user_carts table:', err.message);
+});
+const orderItemsTableReady = ensureOrderItemsTable().catch(err => {
+  console.error('Failed to ensure order_items table:', err.message);
 });
 
 function getDbName() {
@@ -100,6 +104,94 @@ async function ensureCartTable() {
       updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )
   `);
+}
+
+async function ensureOrderItemsTable() {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS order_items (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      order_id INT NOT NULL,
+      product_id INT NULL,
+      name VARCHAR(255) NOT NULL,
+      unit_price DECIMAL(10,2) NOT NULL,
+      qty INT NOT NULL,
+      line_total DECIMAL(10,2) NOT NULL,
+      refunded_qty INT NOT NULL DEFAULT 0
+    )
+  `);
+
+  const dbName = getDbName();
+
+  async function ensureColumn(column, ddl) {
+    const [rows] = await db.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'order_items' AND COLUMN_NAME = ?`,
+      [dbName, column]
+    );
+    if (!rows.length) {
+      try {
+        await db.query(`ALTER TABLE order_items ADD COLUMN ${ddl}`);
+      } catch (err) {
+        if (err.code !== 'ER_DUP_FIELDNAME') {
+          console.warn(`order_items table migration (${column}) skipped:`, err.message);
+        }
+      }
+    }
+  }
+
+  await ensureColumn('product_id', 'product_id INT NULL');
+  await ensureColumn('name', 'name VARCHAR(255) NOT NULL');
+  await ensureColumn('unit_price', 'unit_price DECIMAL(10,2) NOT NULL');
+  await ensureColumn('qty', 'qty INT NOT NULL');
+  await ensureColumn('line_total', 'line_total DECIMAL(10,2) NOT NULL');
+  await ensureColumn('refunded_qty', 'refunded_qty INT NOT NULL DEFAULT 0');
+
+  const [colRows] = await db.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'order_items'`,
+    [dbName]
+  );
+  orderItemsReady = colRows.map(r => r.COLUMN_NAME);
+  return orderItemsReady;
+}
+
+async function ensureOrderItemsForOrder(orderId, items = []) {
+  await orderItemsTableReady;
+  const [rows] = await db.query('SELECT COUNT(*) AS total FROM order_items WHERE order_id = ?', [orderId]);
+  if (rows[0] && Number(rows[0].total) > 0) {
+    return;
+  }
+  const safeItems = Array.isArray(items) ? items : [];
+  for (const item of safeItems) {
+    const unitPrice = Number(item.price || item.unit_price || 0);
+    const qty = Number(item.quantity || item.qty || 0);
+    if (!Number.isFinite(unitPrice) || !Number.isFinite(qty) || qty <= 0) continue;
+    const lineTotal = Number((unitPrice * qty).toFixed(2));
+    await db.query(
+      `INSERT INTO order_items (order_id, product_id, name, unit_price, qty, line_total, refunded_qty)
+       VALUES (?, ?, ?, ?, ?, ?, 0)`,
+      [orderId, item.productId || item.product_id || null, item.productName || item.name || 'Item', unitPrice, qty, lineTotal]
+    );
+  }
+}
+
+async function getOrderItemsByOrderId(orderId) {
+  await orderItemsTableReady;
+  const [rows] = await db.query('SELECT * FROM order_items WHERE order_id = ? ORDER BY id ASC', [orderId]);
+  return rows;
+}
+
+async function addRefundedQty(orderItemId, refundQty) {
+  await orderItemsTableReady;
+  const qty = Number(refundQty) || 0;
+  if (qty <= 0) return;
+  await db.query(
+    'UPDATE order_items SET refunded_qty = refunded_qty + ? WHERE id = ?',
+    [qty, orderItemId]
+  );
+}
+
+async function markOrderItemsFullyRefunded(orderId) {
+  await orderItemsTableReady;
+  await db.query('UPDATE order_items SET refunded_qty = qty WHERE order_id = ?', [orderId]);
 }
 
 function sanitizeCartItems(items = []) {
@@ -288,5 +380,9 @@ module.exports = {
   updateOrderStatus,
   deleteOrder,
   getCartByUserId,
-  saveCart
+  saveCart,
+  ensureOrderItemsForOrder,
+  getOrderItemsByOrderId,
+  addRefundedQty,
+  markOrderItemsFullyRefunded
 };

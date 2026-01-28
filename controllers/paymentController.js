@@ -491,6 +491,10 @@ async function confirmMembershipNetsPayment(req, res) {
   const { plan } = resolveMembershipPlan(pending.plan);
   if (!plan) {
     req.flash('error', 'Membership payment session expired. Please try again.');
+    const acceptsJson = req.headers && typeof req.headers.accept === 'string' && req.headers.accept.includes('application/json');
+    if (acceptsJson || req.xhr) {
+      return res.json({ error: 'Membership payment session expired.', redirect: '/membership/payment' });
+    }
     return res.redirect('/membership/payment');
   }
 
@@ -512,10 +516,18 @@ async function confirmMembershipNetsPayment(req, res) {
       referenceId: null
     });
     req.flash('success', `Your membership plan has been updated to ${plan.key.toUpperCase()}.`);
+    const acceptsJson = req.headers && typeof req.headers.accept === 'string' && req.headers.accept.includes('application/json');
+    if (acceptsJson || req.xhr) {
+      return res.json({ success: true, redirect: `/membership/payment?plan=${plan.key}&confirm=1` });
+    }
     return res.redirect(`/membership/payment?plan=${plan.key}&confirm=1`);
   } catch (err) {
     console.error('NETS membership confirm error:', err.message);
     req.flash('error', 'Unable to confirm NETS payment right now.');
+    const acceptsJson = req.headers && typeof req.headers.accept === 'string' && req.headers.accept.includes('application/json');
+    if (acceptsJson || req.xhr) {
+      return res.json({ error: 'Unable to confirm NETS payment right now.', redirect: '/membership/payment' });
+    }
     return res.redirect('/membership/payment');
   }
 }
@@ -672,6 +684,10 @@ async function confirmWalletTopupNetsPayment(req, res) {
   const amount = Number(pending.amount || 0);
   if (!Number.isFinite(amount) || amount <= 0) {
     req.flash('error', 'Wallet top-up session expired. Please try again.');
+    const acceptsJson = req.headers && typeof req.headers.accept === 'string' && req.headers.accept.includes('application/json');
+    if (acceptsJson || req.xhr) {
+      return res.json({ error: 'Wallet top-up session expired.', redirect: '/payment' });
+    }
     return res.redirect('/payment');
   }
 
@@ -695,10 +711,18 @@ async function confirmWalletTopupNetsPayment(req, res) {
       referenceId: null
     });
     req.flash('success', `Wallet topped up by $${amount.toFixed(2)}.`);
+    const acceptsJson = req.headers && typeof req.headers.accept === 'string' && req.headers.accept.includes('application/json');
+    if (acceptsJson || req.xhr) {
+      return res.json({ success: true, redirect: '/wallet/topup' });
+    }
     return res.redirect('/wallet/topup');
   } catch (err) {
     console.error('NETS wallet top-up confirm error:', err.message);
     req.flash('error', 'Unable to confirm NETS top-up right now.');
+    const acceptsJson = req.headers && typeof req.headers.accept === 'string' && req.headers.accept.includes('application/json');
+    if (acceptsJson || req.xhr) {
+      return res.json({ error: 'Unable to confirm NETS top-up right now.', redirect: '/payment' });
+    }
     return res.redirect('/payment');
   }
 }

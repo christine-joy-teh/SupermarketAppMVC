@@ -187,6 +187,12 @@ async function placeOrderFromCart({
     paymentRef
   });
 
+  try {
+    await OrderModel.ensureOrderItemsForOrder(orderRecord.id, cart);
+  } catch (err) {
+    console.error('Unable to persist order items:', err.message);
+  }
+
   for (const item of cart) {
     await ProductModel.reduceStock(item.productId, item.quantity);
   }

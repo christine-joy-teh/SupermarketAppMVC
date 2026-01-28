@@ -30,11 +30,45 @@
     </div>
   </div>
 
-  <form action="/refunds" method="POST" enctype="multipart/form-data">
+  <form id="refund-form" action="/refunds" method="POST" enctype="multipart/form-data">
     <input type="hidden" name="orderId" value="<%= order.id %>">
+    <input type="hidden" name="refundItems" id="refundItemsInput">
     <div class="mb-3">
       <label class="form-label">Reason for refund</label>
       <textarea name="reason" class="form-control" rows="4" required placeholder="Describe the issue and what went wrong."></textarea>
+    </div>
+    <% if (orderItems && orderItems.length) { %>
+      <div class="mb-3">
+        <label class="form-label">Select items to refund (leave blank for full refund)</label>
+        <div class="list-group">
+          <% orderItems.forEach(item => { %>
+            <div class="list-group-item d-flex align-items-center gap-3">
+              <input class="form-check-input refund-item-toggle" type="checkbox" data-item-id="<%= item.id %>">
+              <div class="flex-grow-1">
+                <div class="fw-semibold"><%= item.name %></div>
+                <small class="text-muted">Unit $<%= Number(item.unit_price || 0).toFixed(2) %> - Purchased <%= item.qty %> - Refundable <%= item.availableQty %></small>
+              </div>
+              <input
+                type="number"
+                class="form-control refund-item-qty"
+                min="1"
+                max="<%= item.availableQty %>"
+                value="<%= item.availableQty %>"
+                data-item-id="<%= item.id %>"
+                style="max-width: 120px;"
+                disabled
+              >
+            </div>
+          <% }) %>
+        </div>
+      </div>
+    <% } %>
+    <div class="mb-3">
+      <label class="form-label">Refund destination</label>
+      <select name="refundDestination" class="form-select">
+        <option value="E_WALLET">E-wallet</option>
+        <option value="ORIGINAL_METHOD">Original payment method</option>
+      </select>
     </div>
     <div class="mb-3">
       <label class="form-label">Attach document (optional)</label>
@@ -47,4 +81,35 @@
     </div>
   </form>
 </div>
+<script>
+  (function () {
+    const form = document.getElementById('refund-form');
+    const itemsInput = document.getElementById('refundItemsInput');
+    if (!form || !itemsInput) return;
+    const toggles = Array.from(document.querySelectorAll('.refund-item-toggle'));
+    const qtyInputs = Array.from(document.querySelectorAll('.refund-item-qty'));
+
+    toggles.forEach(toggle => {
+      toggle.addEventListener('change', () => {
+        const id = toggle.getAttribute('data-item-id');
+        const qtyInput = qtyInputs.find(input => input.getAttribute('data-item-id') === id);
+        if (qtyInput) qtyInput.disabled = !toggle.checked;
+      });
+    });
+
+    form.addEventListener('submit', () => {
+      const items = [];
+      toggles.forEach(toggle => {
+        if (!toggle.checked) return;
+        const id = toggle.getAttribute('data-item-id');
+        const qtyInput = qtyInputs.find(input => input.getAttribute('data-item-id') === id);
+        const qty = qtyInput ? Number(qtyInput.value) : 0;
+        if (id && Number.isFinite(qty) && qty > 0) {
+          items.push({ orderItemId: Number(id), refundQty: qty });
+        }
+      });
+      itemsInput.value = JSON.stringify(items);
+    });
+  })();
+</script>
 <%- include('partials/footer') %>

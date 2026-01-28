@@ -4,6 +4,7 @@ const RefundModel = require('../models/refundModel');
 const UserModel = require('../models/userModel');
 const TransactionLogModel = require('../models/transactionLogModel');
 const orderController = require('./orderController');
+const paypalClient = require('../services/paypalClient');
 
 function resolveUserId(user) {
   return (orderController && orderController.resolveUserId)
@@ -60,12 +61,42 @@ async function renderRefundRequest(req, res) {
       return res.redirect('/orders/history');
     }
 
-    res.render('refundRequest', { order, user: req.session.user });
+    let orderItems = [];
+    try {
+      await OrderModel.ensureOrderItemsForOrder(orderId, order.items || []);
+      orderItems = await OrderModel.getOrderItemsByOrderId(orderId);
+      const refundedMap = await RefundModel.getApprovedRefundedQtyByOrderItemIds(orderItems.map(i => i.id));
+      orderItems = orderItems.map(item => {
+        const approvedRefunded = refundedMap[item.id] || 0;
+        const trackedRefunded = Number(item.refunded_qty) || 0;
+        const refundedQty = Math.max(approvedRefunded, trackedRefunded);
+        const availableQty = Math.max(0, Number(item.qty) - refundedQty);
+        return { ...item, refundedQty, availableQty };
+      });
+    } catch (err) {
+      console.warn('Unable to load order items for refund request:', err.message);
+    }
+
+    res.render('refundRequest', { order, orderItems, user: req.session.user });
   } catch (err) {
     console.error('Error loading refund request:', err.message);
     req.flash('error', 'Unable to load refund request.');
     res.redirect('/orders/history');
   }
+}
+
+function parseRefundItemsPayload(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    } catch (err) {
+      return [];
+    }
+  }
+  return [];
 }
 
 async function submitRefundRequest(req, res) {
@@ -111,17 +142,75 @@ async function submitRefundRequest(req, res) {
     }
 
     const documentPath = req.file ? `/refunds/${path.basename(req.file.path)}` : null;
+
+    await OrderModel.ensureOrderItemsForOrder(orderId, order.items || []);
+    const orderItems = await OrderModel.getOrderItemsByOrderId(orderId);
+    const refundedMap = await RefundModel.getApprovedRefundedQtyByOrderItemIds(orderItems.map(i => i.id));
+    const orderItemsById = orderItems.reduce((acc, item) => {
+      const approvedRefunded = refundedMap[item.id] || 0;
+      const trackedRefunded = Number(item.refunded_qty) || 0;
+      const refundedQty = Math.max(approvedRefunded, trackedRefunded);
+      acc[item.id] = { ...item, refundedQty };
+      return acc;
+    }, {});
+
+    const rawItems = parseRefundItemsPayload(req.body.refundItems || req.body.items);
+    const normalizedItems = rawItems.map(item => ({
+      orderItemId: Number(item.orderItemId || item.id || item.order_item_id),
+      refundQty: Number(item.refundQty || item.qty || item.refund_qty)
+    })).filter(item => Number.isFinite(item.orderItemId) && Number.isFinite(item.refundQty) && item.refundQty > 0);
+
+    let refundItems = [];
+    let totalAmount = 0;
+    if (normalizedItems.length) {
+      for (const item of normalizedItems) {
+        const orderItem = orderItemsById[item.orderItemId];
+        if (!orderItem) {
+          req.flash('error', 'Selected refund item is invalid.');
+          return res.redirect(`/refunds/new?orderId=${orderId}`);
+        }
+        const maxQty = Math.max(0, Number(orderItem.qty) - Number(orderItem.refundedQty || 0));
+        if (!Number.isFinite(item.refundQty) || item.refundQty <= 0 || item.refundQty > maxQty) {
+          req.flash('error', 'Refund quantity exceeds available quantity for an item.');
+          return res.redirect(`/refunds/new?orderId=${orderId}`);
+        }
+        const unitPrice = Number(orderItem.unit_price || 0);
+        const refundAmount = Number((unitPrice * item.refundQty).toFixed(2));
+        refundItems.push({
+          orderItemId: orderItem.id,
+          refundQty: item.refundQty,
+          refundAmount
+        });
+        totalAmount += refundAmount;
+      }
+    } else {
+      totalAmount = Number(order.total || 0);
+    }
+
+    if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+      req.flash('error', 'Invalid refund amount.');
+      return res.redirect(`/refunds/new?orderId=${orderId}`);
+    }
+
+    const destinationRaw = (req.body.refundDestination || '').toString().toUpperCase();
+    const destination = destinationRaw === 'ORIGINAL_METHOD' ? 'ORIGINAL_METHOD' : 'E_WALLET';
     const refundId = await RefundModel.createRefund({
       orderId,
       userId,
       reason,
-      documentPath
+      documentPath,
+      totalAmount,
+      destination
     });
+
+    if (refundItems.length) {
+      await RefundModel.createRefundItems(refundId, refundItems);
+    }
 
     const recentCount = await RefundModel.countRecentByUserId(userId, 24);
     if (recentCount >= 3) {
       await RefundModel.updateStatus(refundId, { status: 'flagged', adminNote: 'Auto-flagged due to frequent refunds.' });
-      const flaggedUntilDate = new Date(Date.now() + (30 * 60 * 1000));
+      const flaggedUntilDate = new Date(Date.now() + (60 * 1000));
       await UserModel.setRefundFlagUntil(userId, flaggedUntilDate);
     }
 
@@ -183,23 +272,48 @@ async function approveRefund(req, res) {
       return res.redirect('/admin/refunds');
     }
 
-    const amountValue = Number(order.total || 0);
+    const amountValue = Number(refund.total_amount || order.total || 0);
     if (!Number.isFinite(amountValue) || amountValue <= 0) {
       req.flash('error', 'Invalid refund amount.');
       return res.redirect('/admin/refunds');
     }
 
     const refundUserId = order.userId;
-    const prevWallet = await UserModel.getWalletBalanceById(refundUserId);
-    await UserModel.adjustWalletBalance(refundUserId, amountValue);
-    const nextWallet = Math.max(0, Number(prevWallet || 0) + amountValue);
-    await TransactionLogModel.createLog({
-      userId: refundUserId,
-      actionType: 'REFUND',
-      previousBalance: prevWallet,
-      newBalance: nextWallet,
-      referenceId: refund.id
-    });
+    const destination = (refund.destination || 'E_WALLET').toUpperCase();
+    const paymentMethod = (order.paymentMethod || '').toLowerCase();
+    let appliedToWallet = true;
+
+    if (destination === 'ORIGINAL_METHOD' && paymentMethod === 'paypal' && order.paymentRef) {
+      await paypalClient.refundCapture(order.paymentRef, amountValue.toFixed(2));
+      appliedToWallet = false;
+    }
+
+    if (destination === 'ORIGINAL_METHOD' && paymentMethod === 'wallet') {
+      appliedToWallet = true;
+    }
+
+    if (appliedToWallet) {
+      const prevWallet = await UserModel.getWalletBalanceById(refundUserId);
+      await UserModel.adjustWalletBalance(refundUserId, amountValue);
+      const nextWallet = Math.max(0, Number(prevWallet || 0) + amountValue);
+      await TransactionLogModel.createLog({
+        userId: refundUserId,
+        actionType: 'REFUND',
+        previousBalance: prevWallet,
+        newBalance: nextWallet,
+        referenceId: refund.id
+      });
+    }
+
+    const refundItems = await RefundModel.getRefundItemsByRefundId(refundId);
+    if (refundItems.length) {
+      for (const item of refundItems) {
+        await OrderModel.addRefundedQty(item.order_item_id, item.refund_qty);
+      }
+    } else {
+      await OrderModel.ensureOrderItemsForOrder(order.id, order.items || []);
+      await OrderModel.markOrderItemsFullyRefunded(order.id);
+    }
 
     await RefundModel.updateStatus(refundId, { status: 'approved', adminNote });
     req.flash('success', `Refund approved for order #${refund.orderId}.`);
