@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 <%
   const homeNavRight = [
     { href: '/cart', label: 'Cart', badgeValue: cartCount, badgeClass: 'bg-primary', classes: 'position-relative' }
@@ -141,3 +142,148 @@
     </div>
   
 <%- include('partials/footer') %>
+=======
+<%
+  const homeNavRight = [
+    { href: '/cart', label: 'Cart', badgeValue: cartCount, badgeClass: 'bg-primary', classes: 'position-relative' }
+  ];
+  if (!user) {
+    homeNavRight.push({ href: '/register', label: 'Register' });
+    homeNavRight.push({ href: '/login', label: 'Login' });
+  } else {
+    homeNavRight.push({ href: '/shopping', label: 'Shop' });
+    homeNavRight.push({ href: '/logout', label: 'Logout' });
+  }
+%>
+<%- include('partials/head', { pageTitle: 'Supermarket App', extraHead: '<style>body { padding-bottom: 40px; }</style>' }) %>
+<%- include('partials/navbar', {
+  searchConfig: {
+    action: '/',
+    queryValue: (typeof q !== 'undefined') ? q : '',
+    sortValue: (typeof sort !== 'undefined') ? sort : '',
+        sortOptions: [
+      { value: '', label: 'Sort' },
+      { value: 'price_asc', label: 'Price: Low to High' },
+      { value: 'price_desc', label: 'Price: High to Low' }
+    ],
+    buttonLabel: 'Search'
+  },
+  navLinksRight: homeNavRight
+}) %>
+
+    <div class="container mt-4">
+      <!-- Hero header: welcome title + subtitle -->
+      <div class="py-5 text-center bg-light rounded mb-4">
+        <h1 class="display-5">Welcome to the Supermarket App</h1>
+        <p class="lead">Shop for fruits, dairy products, bread, and more.</p>
+      </div>
+      <% if (success && success.length) { %>
+        <div class="alert alert-success"><%= success[0] %></div>
+      <% } %>
+      <% if (error && error.length) { %>
+        <div class="alert alert-danger"><%= error[0] %></div>
+      <% } %>
+
+      <div class="text-center mb-3">
+        <% if (user) { %>
+          <% if (user.role === 'admin') { %>
+            <h5 class="mb-1">Welcome back, <%= user.username %> (admin)</h5>
+            <p><a href="/inventory">Manage inventory</a></p>
+          <% } else { %>
+            <h5 class="mb-1">Welcome back, <%= user.username %>!</h5>
+            <p><a href="/shopping">Continue shopping</a></p>
+          <% } %>
+        <% } else { %>
+          <div class="d-grid gap-2 col-6 mx-auto">
+            <a href="/login" class="btn btn-lg btn-primary">Log in to start shopping</a>
+            <a href="/register" class="btn btn-outline-secondary">Create an account</a>
+          </div>
+        <% } %>
+      </div>
+
+      <% if (promotions && promotions.length) { %>
+        <div id="promoCarousel" class="carousel slide mb-4" data-bs-ride="carousel">
+          <div class="carousel-inner">
+            <% promotions.forEach(function(promo, idx) { %>
+              <div class="carousel-item <%= idx === 0 ? 'active' : '' %>">
+                <% if (promo.image) { %>
+                  <img src="<%= promo.image %>" class="d-block w-100" style="height:220px;object-fit:cover;">
+                <% } else { %>
+                  <div class="d-block w-100 bg-secondary text-white d-flex align-items-center justify-content-center" style="height:220px;"> <h3><%= promo.title %></h3> </div>
+                <% } %>
+                <div class="carousel-caption d-none d-md-block bg-dark bg-opacity-50 rounded p-2">
+                  <h5><%= promo.title %></h5>
+                  <p><%= promo.subtitle %></p>
+                </div>
+              </div>
+            <% }) %>
+          </div>
+          <button class="carousel-control-prev" type="button" data-bs-target="#promoCarousel" data-bs-slide="prev">
+            <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+          </button>
+          <button class="carousel-control-next" type="button" data-bs-target="#promoCarousel" data-bs-slide="next">
+            <span class="carousel-control-next-icon" aria-hidden="true"></span>
+          </button>
+        </div>
+      <% } %>
+
+      <!-- Membership moved to Login/Register pages -->
+
+      <% if (bestsellers && bestsellers.length) { %>
+        <h4 class="mb-3">Bestsellers</h4>
+        <div class="row">
+          <% bestsellers.forEach(function(bs) { %>
+            <div class="col-md-3 mb-3">
+              <div class="card h-100 bestseller position-relative">
+                <div class="ribbon-top-left"><span>Bestseller</span></div>
+                <% if (bs.image) { %>
+                  <img src="/images/<%= bs.image %>" class="card-img-top" style="height:140px;object-fit:cover;">
+                <% } else { %>
+                  <div class="bg-light d-flex align-items-center justify-content-center" style="height:140px;">No image</div>
+                <% } %>
+                <div class="card-body d-flex flex-column">
+                  <div class="d-flex justify-content-between align-items-start">
+                    <h6 class="card-title"><a href="/product/<%= bs.id %>"><%= bs.productName %></a></h6>
+                    <div class="bestseller-badge">Bestseller</div>
+                  </div>
+                  <p class="mb-1">$<%= bs.price.toFixed(2) %></p>
+                  <form action="/add-to-cart/<%= bs.id %>" method="POST" class="mt-auto d-flex">
+                    <input type="hidden" name="quantity" value="1">
+                    <button class="btn btn-sm btn-warning">Quick Add</button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          <% }) %>
+        </div>
+      <% } %>
+
+      <% if (products && products.length) { %>
+        <div class="row mt-4">
+          <% products.forEach(product => { %>
+            <div class="col-md-3 mb-3">
+              <div class="card h-100">
+                <% if (product.image) { %>
+                  <img src="/images/<%= product.image %>" class="card-img-top" style="height:160px;object-fit:cover;">
+                <% } else { %>
+                  <div class="bg-light d-flex align-items-center justify-content-center" style="height:160px;">No image</div>
+                <% } %>
+                <div class="card-body d-flex flex-column">
+                  <h5 class="card-title"><a href="/product/<%= product.id %>"><%= product.productName %></a></h5>
+                  <p class="card-text mb-2">$<%= product.price.toFixed(2) %></p>
+                  <div class="mt-auto">
+                    <a href="/product/<%= product.id %>" class="btn btn-outline-primary btn-sm">Details</a>
+                    <% if (user && user.role === 'user') { %>
+                      <a href="/shopping" class="btn btn-primary btn-sm ms-2">Buy</a>
+                    <% } %>
+                  </div>
+                </div>
+              </div>
+            </div>
+          <% }) %>
+        </div>
+      <% } %>
+    </div>
+  
+<%- include('partials/footer') %>
+>>>>>>> bfc95a4 (new updates, transaction logs and refund)
