@@ -10,6 +10,7 @@ const orderController = require('./controllers/orderController');
 const userController = require('./controllers/userController');
 const paymentController = require('./controllers/paymentController');
 const refundController = require('./controllers/refundController');
+const transactionLogController = require('./controllers/transactionLogController');
 
 const { attachSessionLocals, checkAuthenticated, checkAdmin } = require('./middleware');
 const app = express();
@@ -159,6 +160,8 @@ app.post('/admin/users/:id/disable', checkAuthenticated, checkAdmin, (req, res) 
 app.get('/admin/refunds', checkAuthenticated, checkAdmin, (req, res) => refundController.renderAdminRefunds(req, res));
 app.post('/admin/refunds/:id/approve', checkAuthenticated, checkAdmin, (req, res) => refundController.approveRefund(req, res));
 app.post('/admin/refunds/:id/deny', checkAuthenticated, checkAdmin, (req, res) => refundController.denyRefund(req, res));
+// Admin transaction logs
+app.get('/admin/transactions', checkAuthenticated, checkAdmin, (req, res) => transactionLogController.renderAdminLogs(req, res));
 
 // Admin promotion management
 app.get('/admin/promotion', checkAuthenticated, checkAdmin, (req, res) => orderController.renderPromotion(req, res));
@@ -188,22 +191,24 @@ app.post('/paypal/membership/create-order', checkAuthenticated, (req, res) => pa
 app.post('/paypal/membership/capture-order', checkAuthenticated, (req, res) => paymentController.captureMembershipPaypalOrder(req, res));
 app.post('/paypal/wallet/create-order', checkAuthenticated, (req, res) => paymentController.createWalletTopupPaypalOrder(req, res));
 app.post('/paypal/wallet/capture-order', checkAuthenticated, (req, res) => paymentController.captureWalletTopupPaypalOrder(req, res));
-app.post('/nets/qr', checkAuthenticated, (req, res) => paymentController.generateNetsQrCode(req, res));
-app.post('/nets/confirm', checkAuthenticated, (req, res) => paymentController.confirmNetsPayment(req, res));
-app.post('/membership/nets/qr', checkAuthenticated, (req, res) => paymentController.generateMembershipNetsQrCode(req, res));
-app.post('/membership/nets/confirm', checkAuthenticated, (req, res) => paymentController.confirmMembershipNetsPayment(req, res));
-app.get('/wallet/topup', checkAuthenticated, (req, res) => paymentController.renderWalletTopupPage(req, res));
+  app.post('/nets/qr', checkAuthenticated, (req, res) => paymentController.generateNetsQrCode(req, res));
+  app.post('/nets/confirm', checkAuthenticated, (req, res) => paymentController.confirmNetsPayment(req, res));
+  app.post('/membership/nets/qr', checkAuthenticated, (req, res) => paymentController.generateMembershipNetsQrCode(req, res));
+  app.post('/membership/nets/confirm', checkAuthenticated, (req, res) => paymentController.confirmMembershipNetsPayment(req, res));
+  app.post('/membership/wallet/pay', checkAuthenticated, (req, res) => paymentController.payMembershipWithWallet(req, res));
+  app.get('/wallet/topup', checkAuthenticated, (req, res) => paymentController.renderWalletTopupPage(req, res));
 app.post('/wallet/nets/qr', checkAuthenticated, (req, res) => paymentController.generateWalletTopupNetsQrCode(req, res));
 app.post('/wallet/nets/confirm', checkAuthenticated, (req, res) => paymentController.confirmWalletTopupNetsPayment(req, res));
 app.post('/wallet/pay', checkAuthenticated, (req, res) => paymentController.payWithWallet(req, res));
-app.get('/nets-qr/fail', checkAuthenticated, async (req, res) => {
-    res.render('netsQrFail', {
-        title: 'Transaction Failed',
-        responseCode: 'N.A.',
-        instructions: '',
-        errorMsg: 'Transaction timed out. Please try again.'
-    });
-});
+  app.get('/nets-qr/fail', checkAuthenticated, async (req, res) => {
+      res.render('netsQrFail', {
+          title: 'Transaction Failed',
+          responseCode: 'N.A.',
+          instructions: '',
+          errorMsg: 'Transaction timed out. Please try again.'
+      });
+  });
+  app.get('/sse/payment-status/:txnRetrievalRef', checkAuthenticated, (req, res) => paymentController.streamNetsPaymentStatus(req, res));
 
 
 // Logout route - Destroy session and log the user out

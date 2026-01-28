@@ -14,6 +14,7 @@ let planColumnReady;
 let disabledColumnReady;
 let loyaltyColumnReady;
 let walletColumnReady;
+let refundFlagUntilColumnReady;
 
 async function ensurePlanColumn() {
   const dbName = getDbName();
@@ -161,6 +162,34 @@ async function hasWalletBalanceColumn() {
     walletColumnReady = ensureWalletBalanceColumn();
   }
   return walletColumnReady;
+}
+
+async function ensureRefundFlagUntilColumn() {
+  const dbName = getDbName();
+  try {
+    const [exists] = await db.query(
+      "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND COLUMN_NAME = 'refund_flagged_until'",
+      [dbName]
+    );
+    if (exists.length) return true;
+  } catch (err) {
+    console.warn('Refund flag column check failed:', err.message);
+  }
+  try {
+    await db.query('ALTER TABLE users ADD COLUMN refund_flagged_until DATETIME NULL');
+  } catch (err) {
+    if (err.code !== 'ER_DUP_FIELDNAME') {
+      console.warn('Refund flag column migration skipped:', err.message);
+    }
+  }
+  return true;
+}
+
+async function hasRefundFlagUntilColumn() {
+  if (!refundFlagUntilColumnReady) {
+    refundFlagUntilColumnReady = ensureRefundFlagUntilColumn();
+  }
+  return refundFlagUntilColumnReady;
 }
 
 async function list() {
@@ -397,6 +426,32 @@ async function getWalletBalanceById(id) {
   }
 }
 
+async function getRefundFlagUntilById(id) {
+  try {
+    await hasRefundFlagUntilColumn();
+    const [rows] = await db.query('SELECT refund_flagged_until FROM users WHERE id = ?', [id]);
+    if (!rows.length) return null;
+    return rows[0].refund_flagged_until || null;
+  } catch (err) {
+    if (err.code === 'ER_BAD_FIELD_ERROR') return null;
+    throw err;
+  }
+}
+
+async function setRefundFlagUntil(id, flaggedUntil) {
+  try {
+    await hasRefundFlagUntilColumn();
+    const [result] = await db.query(
+      'UPDATE users SET refund_flagged_until = ? WHERE id = ?',
+      [flaggedUntil, id]
+    );
+    return result;
+  } catch (err) {
+    if (err.code === 'ER_BAD_FIELD_ERROR') return { affectedRows: 0 };
+    throw err;
+  }
+}
+
 module.exports = {
   list,
   getById,
@@ -408,5 +463,7 @@ module.exports = {
   adjustLoyaltyPoints,
   getLoyaltyPointsById,
   adjustWalletBalance,
-  getWalletBalanceById
+  getWalletBalanceById,
+  getRefundFlagUntilById,
+  setRefundFlagUntil
 };

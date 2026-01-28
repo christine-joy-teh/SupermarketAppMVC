@@ -71,6 +71,7 @@
       <% const showConfirm = user && (confirm === '1' || confirm === 1 || planKey); %>
       <% const selectedPlan = showConfirm ? (plans[planKey] || plans.silver) : null; %>
       <% const isPaid = selectedPlan ? Number(selectedPlan.amount) > 0 : false; %>
+      <% const walletAmount = typeof walletBalance !== 'undefined' ? Number(walletBalance || 0) : 0; %>
       <% if (showConfirm) { %>
         <div class="card shadow-sm mt-4">
           <div class="card-body">
@@ -113,6 +114,22 @@
                     <input type="hidden" name="plan" value="<%= planKey %>">
                     <button type="submit" class="btn btn-success w-100">Pay with NETS QR</button>
                   </form>
+                  <div class="flex-fill">
+                    <div class="card card-body h-100">
+                      <div class="text-muted small mb-1">E-wallet balance</div>
+                      <div class="fw-semibold mb-2">$<%= walletAmount.toFixed(2) %></div>
+                      <form action="/membership/wallet/pay" method="POST">
+                        <input type="hidden" name="plan" value="<%= planKey %>">
+                        <button type="submit" class="btn btn-dark w-100" <%= walletAmount < Number(selectedPlan.amount || 0) ? 'disabled' : '' %>>
+                          Pay with E-wallet
+                        </button>
+                      </form>
+                      <% if (walletAmount < Number(selectedPlan.amount || 0)) { %>
+                        <div class="text-danger small mt-2">Insufficient wallet balance.</div>
+                      <% } %>
+                      <a href="/wallet/topup" class="btn btn-outline-secondary w-100 mt-2">Top up wallet</a>
+                    </div>
+                  </div>
                 </div>
                 <div class="d-flex flex-column flex-sm-row gap-2 mt-3">
                   <a href="/shopping" class="btn btn-outline-secondary w-100">Back to shopping</a>

@@ -191,11 +191,44 @@ async function getAllOrders() {
   return rows.map(mapOrderRow);
 }
 
+async function countAllOrders() {
+  await tableReady;
+  const [rows] = await db.query('SELECT COUNT(*) AS total FROM orders');
+  return rows[0] ? Number(rows[0].total) || 0 : 0;
+}
+
+async function getAllOrdersPaged(limit = 20, offset = 0) {
+  await tableReady;
+  const safeLimit = Number.isFinite(Number(limit)) ? Number(limit) : 20;
+  const safeOffset = Number.isFinite(Number(offset)) ? Number(offset) : 0;
+  const [rows] = await db.query(
+    `
+    SELECT o.*, u.username AS userName, u.email AS userEmail
+    FROM orders o
+    LEFT JOIN users u ON u.id = o.userId OR u.id = o.user_id
+    ORDER BY o.id DESC
+    LIMIT ? OFFSET ?
+    `,
+    [safeLimit, safeOffset]
+  );
+  return rows.map(mapOrderRow);
+}
+
 async function getOrderById(id) {
   await tableReady;
   const [rows] = await db.query('SELECT * FROM orders WHERE id = ?', [id]);
   if (!rows.length) return null;
   return mapOrderRow(rows[0]);
+}
+
+async function getConfirmedPurchaseTimeById(id) {
+  await tableReady;
+  const [rows] = await db.query(
+    'SELECT confirmed_purchase_time FROM orders WHERE id = ?',
+    [id]
+  );
+  if (!rows.length) return null;
+  return rows[0].confirmed_purchase_time || null;
 }
 
 async function getOrdersByUser(userId) {
@@ -247,7 +280,10 @@ async function saveCart(userId, cartItems = []) {
 module.exports = {
   createOrder,
   getAllOrders,
+  getAllOrdersPaged,
+  countAllOrders,
   getOrderById,
+  getConfirmedPurchaseTimeById,
   getOrdersByUser,
   updateOrderStatus,
   deleteOrder,

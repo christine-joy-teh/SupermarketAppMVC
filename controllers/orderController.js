@@ -343,7 +343,8 @@ async function addToCart(req, res) {
     }
 
     await persistCart(req.session.user, req.session.cart);
-    res.redirect('/cart');
+    const backTo = req.get('referer') || '/shopping';
+    res.redirect(backTo);
   } catch (error) {
     console.error('Database query error:', error.message);
     res.status(500).send('Error retrieving product');
@@ -537,8 +538,21 @@ async function renderUserOrders(req, res) {
 
 async function renderAdminOrders(req, res) {
   try {
-    const orders = await OrderModel.getAllOrders();
-    res.render('adminOrders', { orders, user: req.session.user });
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const perPage = 20;
+    const total = await OrderModel.countAllOrders();
+    const totalPages = Math.max(1, Math.ceil(total / perPage));
+    const safePage = Math.min(page, totalPages);
+    const offset = (safePage - 1) * perPage;
+    const orders = await OrderModel.getAllOrdersPaged(perPage, offset);
+    res.render('adminOrders', {
+      orders,
+      user: req.session.user,
+      pagination: {
+        page: safePage,
+        totalPages
+      }
+    });
   } catch (err) {
     console.error('Error fetching orders:', err.message);
     req.flash('error', 'Unable to load orders right now.');

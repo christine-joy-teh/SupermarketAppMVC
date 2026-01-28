@@ -9,6 +9,13 @@ function resolveUserId(user) {
   return user.id || user.userId || user.user_id || user.userID || null;
 }
 
+function getUserWalletBalance(user) {
+  if (!user) return 0;
+  const raw = typeof user.wallet_balance !== 'undefined' ? user.wallet_balance : user.walletBalance;
+  const balance = Number(raw);
+  return Number.isFinite(balance) ? balance : 0;
+}
+
 function isValidEmail(email) {
   return typeof email === 'string' && email.includes('@') && email.includes('.');
 }
@@ -150,7 +157,8 @@ function renderMembershipPayment(req, res) {
     plans,
     user: req.session.user,
     confirm,
-    paypalClientId: process.env.PAYPAL_CLIENT_ID
+    paypalClientId: process.env.PAYPAL_CLIENT_ID,
+    walletBalance: getUserWalletBalance(req.session.user)
   });
 }
 

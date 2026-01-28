@@ -50,13 +50,14 @@
               <div class="d-flex justify-content-end mb-3">
                 <a class="btn btn-sm btn-outline-secondary" href="/orders/<%= order.id %>/invoice">View invoice</a>
                 <% const refund = refundsMap && refundsMap[order.id] ? refundsMap[order.id] : null; %>
-                <% const paymentMethod = (order.paymentMethod || '').toLowerCase(); %>
-                <% const canRefund = (paymentMethod === 'paypal' || paymentMethod === 'wallet') && (!refund || refund.status === 'denied'); %>
+                <% const canRefund = (!refund || refund.status === 'denied'); %>
                 <% if (canRefund) { %>
                   <a class="btn btn-sm btn-outline-primary ms-2" href="/refunds/new?orderId=<%= order.id %>">Request refund</a>
                 <% } %>
               </div>
               <p class="mb-2"><strong>Delivery:</strong> <%= order.deliveryMethod || 'delivery' %></p>
+              <p class="mb-2"><strong>Payment method:</strong> <%= order.paymentMethod || 'n/a' %></p>
+              <p class="mb-2"><strong>Payment ID:</strong> <%= order.paymentRef || 'n/a' %></p>
               <p class="mb-2"><strong>Subtotal:</strong> $<%= Number(order.subtotal || 0).toFixed(2) %></p>
               <p class="mb-2"><strong>Savings:</strong> $<%= Number(order.savings || 0).toFixed(2) %></p>
               <p class="mb-3"><strong>Total charged:</strong> $<%= Number(order.total || 0).toFixed(2) %></p>

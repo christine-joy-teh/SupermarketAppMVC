@@ -70,6 +70,16 @@ async function getByUserId(userId) {
   return rows;
 }
 
+async function countRecentByUserId(userId, hours = 24) {
+  await tableReady();
+  const safeHours = Number.isFinite(Number(hours)) ? Number(hours) : 24;
+  const [rows] = await db.query(
+    'SELECT COUNT(*) AS total FROM refunds WHERE userId = ? AND createdAt >= (NOW() - INTERVAL ? HOUR)',
+    [userId, safeHours]
+  );
+  return rows[0] ? Number(rows[0].total) || 0 : 0;
+}
+
 async function listAll() {
   await tableReady();
   const [rows] = await db.query(`
@@ -79,6 +89,30 @@ async function listAll() {
     LEFT JOIN users u ON u.id = r.userId
     ORDER BY r.id DESC
   `);
+  return rows;
+}
+
+async function countAll() {
+  await tableReady();
+  const [rows] = await db.query('SELECT COUNT(*) AS total FROM refunds');
+  return rows[0] ? Number(rows[0].total) || 0 : 0;
+}
+
+async function listAllPaged(limit = 20, offset = 0) {
+  await tableReady();
+  const safeLimit = Number.isFinite(Number(limit)) ? Number(limit) : 20;
+  const safeOffset = Number.isFinite(Number(offset)) ? Number(offset) : 0;
+  const [rows] = await db.query(
+    `
+    SELECT r.*, o.total AS orderTotal, o.paymentMethod, o.paymentRef, u.username AS userName, u.email AS userEmail
+    FROM refunds r
+    LEFT JOIN orders o ON o.id = r.orderId
+    LEFT JOIN users u ON u.id = r.userId
+    ORDER BY r.id DESC
+    LIMIT ? OFFSET ?
+    `,
+    [safeLimit, safeOffset]
+  );
   return rows;
 }
 
@@ -96,6 +130,9 @@ module.exports = {
   getById,
   getByOrderId,
   getByUserId,
+  countRecentByUserId,
   listAll,
+  listAllPaged,
+  countAll,
   updateStatus
 };

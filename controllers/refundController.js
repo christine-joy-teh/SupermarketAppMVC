@@ -1,8 +1,8 @@
 const path = require('path');
 const OrderModel = require('../models/orderModel');
 const RefundModel = require('../models/refundModel');
-const paypalClient = require('../services/paypalClient');
 const UserModel = require('../models/userModel');
+const TransactionLogModel = require('../models/transactionLogModel');
 const orderController = require('./orderController');
 
 function resolveUserId(user) {
@@ -11,15 +11,10 @@ function resolveUserId(user) {
     : (user && (user.id || user.userId || user.user_id || user.userID)) || null;
 }
 
-function resolveRefundPayment(order) {
-  const method = (order && order.paymentMethod ? String(order.paymentMethod).toLowerCase() : '');
-  if (method === 'paypal' && order.paymentRef) {
-    return { method: 'paypal', label: 'PayPal' };
-  }
-  if (method === 'wallet') {
-    return { method: 'wallet', label: 'E-wallet' };
-  }
-  return null;
+function isRefundEligible(order) {
+  if (!order) return false;
+  const amountValue = Number(order.total || 0);
+  return Number.isFinite(amountValue) && amountValue > 0;
 }
 
 async function renderRefundRequest(req, res) {
@@ -43,8 +38,18 @@ async function renderRefundRequest(req, res) {
       return res.redirect('/orders/history');
     }
 
-    if (!resolveRefundPayment(order)) {
-      req.flash('error', 'Refunds are only available for PayPal or E-wallet payments.');
+    const confirmedAt = await OrderModel.getConfirmedPurchaseTimeById(orderId);
+    if (confirmedAt) {
+      const confirmedTime = new Date(confirmedAt).getTime();
+      const nowTime = Date.now();
+      if (Number.isFinite(confirmedTime) && (nowTime - confirmedTime) > (30 * 60 * 1000)) {
+        req.flash('error', 'Refund requests can only be made within 30 minutes after purchase confirmation.');
+        return res.redirect('/orders/history');
+      }
+    }
+
+    if (!isRefundEligible(order)) {
+      req.flash('error', 'This order is not eligible for a refund.');
       return res.redirect('/orders/history');
     }
 
@@ -84,8 +89,17 @@ async function submitRefundRequest(req, res) {
       return res.redirect('/orders/history');
     }
 
-    if (!resolveRefundPayment(order)) {
-      req.flash('error', 'Refunds are only available for PayPal or E-wallet payments.');
+    const flaggedUntil = await UserModel.getRefundFlagUntilById(userId);
+    if (flaggedUntil && new Date(flaggedUntil) > new Date()) {
+      req.flash(
+        'error',
+        `Your account is currently flagged due to unusually frequent refund requests. Refunds will be available again after ${new Date(flaggedUntil).toLocaleString()}.`
+      );
+      return res.redirect('/orders/history');
+    }
+
+    if (!isRefundEligible(order)) {
+      req.flash('error', 'This order is not eligible for a refund.');
       return res.redirect('/orders/history');
     }
 
@@ -97,12 +111,20 @@ async function submitRefundRequest(req, res) {
     }
 
     const documentPath = req.file ? `/refunds/${path.basename(req.file.path)}` : null;
-    await RefundModel.createRefund({
+    const refundId = await RefundModel.createRefund({
       orderId,
       userId,
       reason,
       documentPath
     });
+
+    const recentCount = await RefundModel.countRecentByUserId(userId, 24);
+    if (recentCount >= 3) {
+      await RefundModel.updateStatus(refundId, { status: 'flagged', adminNote: 'Auto-flagged due to frequent refunds.' });
+      const flaggedUntilDate = new Date(Date.now() + (30 * 60 * 1000));
+      await UserModel.setRefundFlagUntil(userId, flaggedUntilDate);
+    }
+
     req.flash('success', 'Refund request submitted.');
     res.redirect('/orders/history');
   } catch (err) {
@@ -114,8 +136,21 @@ async function submitRefundRequest(req, res) {
 
 async function renderAdminRefunds(req, res) {
   try {
-    const refunds = await RefundModel.listAll();
-    res.render('adminRefunds', { refunds, user: req.session.user });
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const perPage = 20;
+    const total = await RefundModel.countAll();
+    const totalPages = Math.max(1, Math.ceil(total / perPage));
+    const safePage = Math.min(page, totalPages);
+    const offset = (safePage - 1) * perPage;
+    const refunds = await RefundModel.listAllPaged(perPage, offset);
+    res.render('adminRefunds', {
+      refunds,
+      user: req.session.user,
+      pagination: {
+        page: safePage,
+        totalPages
+      }
+    });
   } catch (err) {
     console.error('Error loading refunds:', err.message);
     req.flash('error', 'Unable to load refunds right now.');
@@ -143,8 +178,7 @@ async function approveRefund(req, res) {
     }
 
     const order = await OrderModel.getOrderById(refund.orderId);
-    const payment = resolveRefundPayment(order);
-    if (!order || !payment) {
+    if (!isRefundEligible(order)) {
       req.flash('error', 'This order is not eligible for a refund.');
       return res.redirect('/admin/refunds');
     }
@@ -155,11 +189,17 @@ async function approveRefund(req, res) {
       return res.redirect('/admin/refunds');
     }
 
-    if (payment.method === 'paypal') {
-      await paypalClient.refundCapture(order.paymentRef, amountValue.toFixed(2));
-    } else if (payment.method === 'wallet') {
-      await UserModel.adjustWalletBalance(order.userId, amountValue);
-    }
+    const refundUserId = order.userId;
+    const prevWallet = await UserModel.getWalletBalanceById(refundUserId);
+    await UserModel.adjustWalletBalance(refundUserId, amountValue);
+    const nextWallet = Math.max(0, Number(prevWallet || 0) + amountValue);
+    await TransactionLogModel.createLog({
+      userId: refundUserId,
+      actionType: 'REFUND',
+      previousBalance: prevWallet,
+      newBalance: nextWallet,
+      referenceId: refund.id
+    });
 
     await RefundModel.updateStatus(refundId, { status: 'approved', adminNote });
     req.flash('success', `Refund approved for order #${refund.orderId}.`);

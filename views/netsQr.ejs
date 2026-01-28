@@ -20,6 +20,7 @@
     <div class="mt-2">
       Time remaining: <span id="nets-timer"></span>
     </div>
+    <div class="small text-muted mt-1" id="nets-status">Waiting for NETS confirmation...</div>
 
     <% if (txnRetrievalRef) { %>
       <div class="text-muted small mt-2">Reference: <%= txnRetrievalRef %></div>
@@ -41,43 +42,118 @@
       </div>
     </div>
   </div>
+
+  <script src="https://unpkg.com/event-source-polyfill"></script>
   <script>
     (function () {
       var totalSeconds = Number('<%= timer || 300 %>');
-      var el = document.getElementById('nets-timer');
-      function tick() {
-        var minutes = Math.floor(totalSeconds / 60);
-        var seconds = totalSeconds % 60;
-        el.textContent = minutes + ':' + String(seconds).padStart(2, '0');
-        if (totalSeconds > 0) {
-          totalSeconds -= 1;
+      var timerEl = document.getElementById('nets-timer');
+      var statusEl = document.getElementById('nets-status');
+      if (!timerEl) return;
+
+      function formatTime(seconds) {
+        var minutes = Math.floor(seconds / 60);
+        var remainder = seconds % 60;
+        return minutes + ':' + String(remainder).padStart(2, '0');
+      }
+
+      var timerInterval = null;
+      function updateTimer() {
+        timerEl.textContent = formatTime(Math.max(totalSeconds, 0));
+        totalSeconds -= 1;
+        if (totalSeconds < 0) {
+          if (timerInterval) {
+            clearInterval(timerInterval);
+          }
+          if (sse) {
+            sse.close();
+          }
+          window.location.href = '/nets-qr/fail';
+        }
+      }
+      updateTimer();
+      timerInterval = setInterval(updateTimer, 1000);
+
+      var loyaltyPayload = {
+        loyaltyRedeemPoints: "<%= typeof loyaltyRedeemPoints !== 'undefined' ? loyaltyRedeemPoints : 0 %>"
+      };
+      var confirming = false;
+      var sse = null;
+
+      function finalizeOrder() {
+        if (confirming) return;
+        confirming = true;
+        if (statusEl) {
+          statusEl.textContent = 'Payment confirmed. Finalising order...';
+        }
+        fetch('/nets/confirm', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(loyaltyPayload)
+        })
+          .then(function (res) { return res.json(); })
+          .then(function (payload) {
+            if (payload && payload.redirect) {
+              window.location.href = payload.redirect;
+              return;
+            }
+            window.location.href = '/orders/history';
+          })
+          .catch(function () {
+            window.location.href = '/orders/history';
+          });
+      }
+
+      var EventSourceImpl = window.EventSource || window.EventSourcePolyfill;
+      if (!EventSourceImpl) return;
+
+      var txnRetrievalRef = "<%= txnRetrievalRef %>";
+      var statusUrl = '/sse/payment-status/' + encodeURIComponent(txnRetrievalRef);
+      sse = window.EventSource
+        ? new EventSource(statusUrl)
+        : new EventSourcePolyfill(statusUrl, { heartbeatTimeout: 150000 });
+
+      sse.addEventListener('message', function (event) {
+        var data;
+        try {
+          data = JSON.parse(event.data);
+        } catch (e) {
           return;
         }
-        window.location.href = '/nets-qr/fail';
-      }
-      if (el) {
-        tick();
-        setInterval(tick, 1000);
-      }
+        if (data && data.success) {
+          finalizeOrder();
+          if (sse) sse.close();
+          if (timerInterval) clearInterval(timerInterval);
+        } else if (data && data.fail) {
+          if (statusEl) {
+            statusEl.textContent = data.status && data.status.message
+              ? data.status.message
+              : 'Payment failed. Please try again.';
+          }
+          if (sse) sse.close();
+          if (timerInterval) clearInterval(timerInterval);
+          window.location.href = '/nets-qr/fail';
+        } else if (data && data.error) {
+          if (statusEl) {
+            statusEl.textContent = data.error;
+          }
+        }
+      });
+
+      sse.addEventListener('error', function () {
+        if (statusEl) {
+          statusEl.textContent = 'Waiting for NETS confirmation...';
+        }
+      });
+
+      window.addEventListener('beforeunload', function () {
+        if (sse) {
+          sse.close();
+        }
+      });
     })();
   </script>
-  <% if (typeof autoConfirmAction !== 'undefined' && autoConfirmAction) { %>
-    <script>
-      (function () {
-        var delay = Number('<%= typeof autoConfirmDelayMs !== "undefined" ? autoConfirmDelayMs : 0 %>');
-        var action = '<%= autoConfirmAction %>';
-        if (!action) return;
-        setTimeout(function () {
-          fetch(action, { method: 'POST' })
-            .then(function (res) { return res.text(); })
-            .then(function () {
-              window.location.href = '<%= typeof autoConfirmRedirect !== "undefined" && autoConfirmRedirect ? autoConfirmRedirect : "/wallet/topup" %>';
-            })
-            .catch(function () {
-              window.location.href = '<%= typeof autoConfirmRedirect !== "undefined" && autoConfirmRedirect ? autoConfirmRedirect : "/wallet/topup" %>';
-            });
-        }, Math.max(0, delay));
-      })();
-    </script>
-  <% } %>
 <%- include('partials/footer') %>
