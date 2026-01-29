@@ -60,10 +60,21 @@ async function createLog({
   actionType,
   previousBalance = null,
   newBalance = null,
-  referenceId = null
+  referenceId = null,
+  fraudContext = null
 }) {
   await ready();
-  const { suspiciousFlag, suspiciousReason } = await evaluateSuspicious(userId, actionType, referenceId);
+  const fraudClient = require('../services/fraudClient');
+  const fraudResult = await fraudClient.checkTransaction({
+    userId,
+    actionType,
+    referenceId,
+    previousBalance,
+    newBalance,
+    gateway: fraudContext
+  });
+  const suspiciousFlag = fraudResult && fraudResult.suspicious ? 1 : 0;
+  const suspiciousReason = fraudResult && fraudResult.reason ? String(fraudResult.reason).slice(0, 255) : null;
   const [result] = await db.query(
     `INSERT INTO transaction_logs (user_id, action_type, previous_balance, new_balance, reference_id, suspicious_flag, suspicious_reason)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -84,8 +95,11 @@ async function countRecentByUserAction(userId, actionType, minutes) {
   return rows[0] ? Number(rows[0].total) || 0 : 0;
 }
 
-async function evaluateSuspicious(userId, actionType, referenceId) {
-  if (!userId || !actionType) return { suspiciousFlag: 0, suspiciousReason: null };
+async function evaluateSuspiciousRules(payload = {}) {
+  const userId = payload.userId;
+  const actionType = payload.actionType;
+  const referenceId = payload.referenceId;
+  if (!userId || !actionType) return { suspicious: false, reason: null };
   const normalized = String(actionType).toUpperCase();
   const reasons = [];
 
@@ -138,8 +152,8 @@ async function evaluateSuspicious(userId, actionType, referenceId) {
       }
     }
   }
-  if (!reasons.length) return { suspiciousFlag: 0, suspiciousReason: null };
-  return { suspiciousFlag: 1, suspiciousReason: reasons.join('; ').slice(0, 255) };
+  if (!reasons.length) return { suspicious: false, reason: null };
+  return { suspicious: true, reason: reasons.join('; ').slice(0, 255) };
 }
 
 async function getRefundById(refundId) {
@@ -210,6 +224,7 @@ async function getUserAverageOrderTotal(userId, excludeOrderId = null) {
 
 module.exports = {
   createLog,
+  evaluateSuspiciousRules,
   async listAll() {
     await ready();
     const [rows] = await db.query(`

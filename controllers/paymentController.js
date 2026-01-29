@@ -108,7 +108,8 @@ async function capturePaypalOrder(req, res) {
         actionType: 'PAYMENT',
         previousBalance: null,
         newBalance: null,
-        referenceId: orderRecord.id
+        referenceId: orderRecord.id,
+        fraudContext: { provider: 'paypal', capture, orderId: orderRecord.id }
       });
     }
 
@@ -242,7 +243,8 @@ async function confirmNetsPayment(req, res) {
         actionType: 'PAYMENT',
         previousBalance: null,
         newBalance: null,
-        referenceId: orderRecord.id
+        referenceId: orderRecord.id,
+        fraudContext: { provider: 'nets', nets: req.session.lastNetsQr || null, orderId: orderRecord.id }
       });
     }
 
@@ -448,7 +450,8 @@ async function captureMembershipPaypalOrder(req, res) {
       actionType: 'PAYMENT',
       previousBalance: null,
       newBalance: null,
-      referenceId: null
+      referenceId: null,
+      fraudContext: { provider: 'paypal', capture, membershipPlan: plan.key }
     });
     req.flash('success', `Your membership plan has been updated to ${plan.key.toUpperCase()}.`);
     return res.json({ success: true, redirect: `/membership/payment?plan=${plan.key}&confirm=1` });
@@ -513,7 +516,8 @@ async function confirmMembershipNetsPayment(req, res) {
       actionType: 'PAYMENT',
       previousBalance: null,
       newBalance: null,
-      referenceId: null
+      referenceId: null,
+      fraudContext: { provider: 'nets', nets: req.session.lastNetsQr || null, membershipPlan: plan.key }
     });
     req.flash('success', `Your membership plan has been updated to ${plan.key.toUpperCase()}.`);
     const acceptsJson = req.headers && typeof req.headers.accept === 'string' && req.headers.accept.includes('application/json');
@@ -567,7 +571,8 @@ async function payMembershipWithWallet(req, res) {
       actionType: 'PAYMENT',
       previousBalance: currentBalance,
       newBalance: nextBalance,
-      referenceId: null
+      referenceId: null,
+      fraudContext: { provider: 'paypal', capture, topupAmount: amount }
     });
 
     await UserModel.update(userId, { plan: plan.key });
@@ -645,7 +650,8 @@ async function captureWalletTopupPaypalOrder(req, res) {
       actionType: 'PAYMENT',
       previousBalance: currentBalance,
       newBalance: nextBalance,
-      referenceId: null
+      referenceId: null,
+      fraudContext: { provider: 'nets', nets: req.session.lastNetsQr || null, topupAmount: amount }
     });
     req.flash('success', `Wallet topped up by $${amount.toFixed(2)}.`);
     return res.json({ success: true, redirect: '/wallet/topup' });

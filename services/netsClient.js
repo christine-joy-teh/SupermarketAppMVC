@@ -82,6 +82,12 @@ async function generateQrCode(req, res) {
     console.log('webhookUrl:' + webhookUrl);
 
     const viewData = req.netsViewData || {};
+    if (req.session) {
+      req.session.lastNetsQr = {
+        txnRetrievalRef: txnRetrievalRef,
+        responseData: result.responseData || null
+      };
+    }
     return res.render('netsQr', {
       total: cartTotal,
       title: 'Scan to Pay',

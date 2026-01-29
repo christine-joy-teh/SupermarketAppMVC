@@ -11,6 +11,7 @@ const userController = require('./controllers/userController');
 const paymentController = require('./controllers/paymentController');
 const refundController = require('./controllers/refundController');
 const transactionLogController = require('./controllers/transactionLogController');
+const fraudController = require('./controllers/fraudController');
 
 const { attachSessionLocals, checkAuthenticated, checkAdmin } = require('./middleware');
 const app = express();
@@ -92,6 +93,9 @@ app.post('/admin/orders/:id/status', checkAuthenticated, checkAdmin, (req, res) 
 app.post('/admin/orders/:id/delete', checkAuthenticated, checkAdmin, (req, res) => orderController.remove(req, res));
 app.get('/refunds/new', checkAuthenticated, (req, res) => refundController.renderRefundRequest(req, res));
 app.post('/refunds', checkAuthenticated, refundUpload.single('document'), (req, res) => refundController.submitRefundRequest(req, res));
+
+// Fraud check API (used by transaction logging)
+app.post('/api/fraud/check', (req, res) => fraudController.checkFraud(req, res));
 
 // POST route to handle registration
 app.post('/register', (req, res) => userController.register(req, res));
