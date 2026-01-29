@@ -75,6 +75,24 @@ async function captureOrder(orderId) {
   return data;
 }
 
+async function getCapture(captureId) {
+  const accessToken = await getAccessToken();
+  const response = await fetch(`${PAYPAL_API}/v2/payments/captures/${captureId}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${accessToken}`
+    }
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`PayPal capture lookup failed: ${response.status} ${body}`);
+  }
+
+  return response.json();
+}
+
 async function refundCapture(captureId, amount) {
   const accessToken = await getAccessToken();
   const payload = amount
@@ -103,4 +121,4 @@ async function refundCapture(captureId, amount) {
   return response.json();
 }
 
-module.exports = { createOrder, captureOrder, refundCapture };
+module.exports = { createOrder, captureOrder, refundCapture, getCapture };

@@ -116,12 +116,12 @@ async function getByUserId(userId) {
   return rows;
 }
 
-async function countRecentByUserId(userId, hours = 24) {
+async function countRecentByUserId(userId, minutes = 60 * 24) {
   await tableReady();
-  const safeHours = Number.isFinite(Number(hours)) ? Number(hours) : 24;
+  const safeMinutes = Number.isFinite(Number(minutes)) ? Number(minutes) : (60 * 24);
   const [rows] = await db.query(
-    'SELECT COUNT(*) AS total FROM refunds WHERE userId = ? AND createdAt >= (NOW() - INTERVAL ? HOUR)',
-    [userId, safeHours]
+    'SELECT COUNT(*) AS total FROM refunds WHERE userId = ? AND createdAt >= (NOW() - INTERVAL ? MINUTE)',
+    [userId, safeMinutes]
   );
   return rows[0] ? Number(rows[0].total) || 0 : 0;
 }

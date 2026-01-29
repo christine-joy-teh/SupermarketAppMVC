@@ -15,6 +15,8 @@ let disabledColumnReady;
 let loyaltyColumnReady;
 let walletColumnReady;
 let refundFlagUntilColumnReady;
+let fraudWarningColumnReady;
+let createdAtColumnReady;
 
 async function ensurePlanColumn() {
   const dbName = getDbName();
@@ -82,6 +84,35 @@ async function hasDisabledColumn() {
     disabledColumnReady = ensureDisabledColumn();
   }
   return disabledColumnReady;
+}
+
+async function ensureFraudWarningColumn() {
+  const dbName = getDbName();
+  try {
+    const [exists] = await db.query(
+      "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND COLUMN_NAME = 'fraud_warning_sent_at'",
+      [dbName]
+    );
+    if (exists.length) return true;
+  } catch (err) {
+    console.warn('Fraud warning column check failed:', err.message);
+  }
+  try {
+    await db.query('ALTER TABLE users ADD COLUMN fraud_warning_sent_at DATETIME NULL');
+    await db.query("ALTER TABLE users ADD COLUMN fraud_warning_reason VARCHAR(255) DEFAULT NULL");
+  } catch (err) {
+    if (err.code !== 'ER_DUP_FIELDNAME') {
+      console.warn('Fraud warning column migration skipped:', err.message);
+    }
+  }
+  return true;
+}
+
+async function hasFraudWarningColumn() {
+  if (!fraudWarningColumnReady) {
+    fraudWarningColumnReady = ensureFraudWarningColumn();
+  }
+  return fraudWarningColumnReady;
 }
 
 async function ensureLoyaltyPointsColumn() {
@@ -192,15 +223,73 @@ async function hasRefundFlagUntilColumn() {
   return refundFlagUntilColumnReady;
 }
 
+async function ensureCreatedAtColumn() {
+  const dbName = getDbName();
+  try {
+    const [exists] = await db.query(
+      "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND COLUMN_NAME = 'createdAt'",
+      [dbName]
+    );
+    if (exists.length) return true;
+  } catch (err) {
+    console.warn('CreatedAt column check failed:', err.message);
+  }
+
+  try {
+    await db.query('ALTER TABLE users ADD COLUMN createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
+  } catch (err) {
+    if (err.code !== 'ER_DUP_FIELDNAME') {
+      console.warn('CreatedAt column migration skipped:', err.message);
+    }
+  }
+
+  try {
+    await db.query(`
+      UPDATE users u
+      SET createdAt = COALESCE(
+        createdAt,
+        (SELECT MIN(o.createdAt) FROM orders o WHERE o.userId = u.id OR o.user_id = u.id)
+      )
+    `);
+    await db.query('UPDATE users SET createdAt = NOW() WHERE createdAt IS NULL');
+    await db.query(`
+      UPDATE users u
+      JOIN (
+        SELECT COALESCE(o.user_id, o.userId) AS uid, MIN(o.createdAt) AS minCreated
+        FROM orders o
+        GROUP BY COALESCE(o.user_id, o.userId)
+      ) x ON x.uid = u.id
+      SET u.createdAt = CASE
+        WHEN u.createdAt IS NULL THEN x.minCreated
+        WHEN u.createdAt > x.minCreated THEN x.minCreated
+        ELSE u.createdAt
+      END
+    `);
+  } catch (err) {
+    console.warn('CreatedAt backfill skipped:', err.message);
+  }
+
+  return true;
+}
+
+async function hasCreatedAtColumn() {
+  if (!createdAtColumnReady) {
+    createdAtColumnReady = ensureCreatedAtColumn();
+  }
+  return createdAtColumnReady;
+}
+
 async function list() {
   // Prefer selecting plan; if column is missing, fall back gracefully.
-  const fieldsWithPlan = 'id, username, email, address, contact, role, plan, loyalty_points, wallet_balance, disabled';
+  const fieldsWithPlan = 'id, username, email, address, contact, role, plan, loyalty_points, wallet_balance, disabled, fraud_warning_sent_at, fraud_warning_reason';
   const fieldsWithoutPlan = 'id, username, email, address, contact, role';
   try {
     await hasPlanColumn();
     await hasLoyaltyPointsColumn();
     await hasWalletBalanceColumn();
     await hasDisabledColumn();
+    await hasFraudWarningColumn();
+    await hasCreatedAtColumn();
     const [rows] = await db.query(`SELECT ${fieldsWithPlan} FROM users ORDER BY id DESC`);
     return rows;
   } catch (err) {
@@ -211,13 +300,15 @@ async function list() {
 }
 
 async function getById(id) {
-  const fieldsWithPlan = 'id, username, email, address, contact, role, plan, loyalty_points, wallet_balance, disabled';
+  const fieldsWithPlan = 'id, username, email, address, contact, role, plan, loyalty_points, wallet_balance, disabled, fraud_warning_sent_at, fraud_warning_reason';
   const fieldsWithoutPlan = 'id, username, email, address, contact, role';
   try {
     await hasPlanColumn();
     await hasLoyaltyPointsColumn();
     await hasWalletBalanceColumn();
     await hasDisabledColumn();
+    await hasFraudWarningColumn();
+    await hasCreatedAtColumn();
     const [rows] = await db.query(`SELECT ${fieldsWithPlan} FROM users WHERE id = ?`, [id]);
     return rows[0] || null;
   } catch (err) {
@@ -335,6 +426,7 @@ async function findByEmail(email) {
 
 async function create({ username, email, password, address, contact, plan }) {
   await hasPlanColumn();
+  await hasCreatedAtColumn();
 
   // Try inserting with plan; if column missing, fall back without it
   const baseParams = [username, email, password, address, contact, 'user'];
@@ -452,6 +544,34 @@ async function setRefundFlagUntil(id, flaggedUntil) {
   }
 }
 
+async function markFraudWarningSent(id, timestamp = new Date(), reason = null) {
+  try {
+    await hasFraudWarningColumn();
+    const [result] = await db.query(
+      'UPDATE users SET fraud_warning_sent_at = ?, fraud_warning_reason = ? WHERE id = ?',
+      [timestamp, reason ? String(reason).slice(0, 255) : null, id]
+    );
+    return result;
+  } catch (err) {
+    if (err.code === 'ER_BAD_FIELD_ERROR') return { affectedRows: 0 };
+    throw err;
+  }
+}
+
+async function clearFraudWarning(id) {
+  try {
+    await hasFraudWarningColumn();
+    const [result] = await db.query(
+      'UPDATE users SET fraud_warning_sent_at = NULL, fraud_warning_reason = NULL WHERE id = ?',
+      [id]
+    );
+    return result;
+  } catch (err) {
+    if (err.code === 'ER_BAD_FIELD_ERROR') return { affectedRows: 0 };
+    throw err;
+  }
+}
+
 module.exports = {
   list,
   getById,
@@ -465,5 +585,7 @@ module.exports = {
   adjustWalletBalance,
   getWalletBalanceById,
   getRefundFlagUntilById,
-  setRefundFlagUntil
+  setRefundFlagUntil,
+  markFraudWarningSent,
+  clearFraudWarning
 };

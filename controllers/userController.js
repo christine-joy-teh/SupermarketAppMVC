@@ -110,6 +110,9 @@ async function login(req, res) {
       console.error('Unable to load saved cart:', loadErr.message);
     }
 
+    if (req.session.user.fraud_warning_sent_at && !req.session.user.disabled) {
+      req.flash('warning', 'Your account has been flagged for suspicious activity; one more violation will disable it temporarily.');
+    }
     req.flash('success', 'Login successful!');
     if (req.session.user.role === 'user') {
       return res.redirect('/shopping');
@@ -233,6 +236,7 @@ async function renderEditUser(req, res) {
 async function updateUser(req, res) {
   const { username, email, address, contact, role, plan, disabled, loyaltyPoints } = req.body;
   const userId = req.params.id;
+  const isDisabled = disabled === '1';
 
   if (!username || !email || !role || !isValidEmail(email) || !isValidRole(role) || !isValidPlan(plan || '')) {
     req.flash('error', 'Please provide a username, valid email, role (admin/user), and a valid plan (Basic/Silver/Gold).');
@@ -248,7 +252,7 @@ async function updateUser(req, res) {
       contact: contact || '',
       role,
       plan: plan || null,
-      disabled: disabled === '1',
+      disabled: isDisabled,
       loyaltyPoints: Number.isFinite(parsedPoints) ? parsedPoints : undefined
     });
 
@@ -256,6 +260,13 @@ async function updateUser(req, res) {
       req.flash('error', 'User not found or not updated.');
     } else {
       req.flash('success', 'User updated.');
+      if (!isDisabled) {
+        try {
+          await UserModel.clearFraudWarning(userId);
+        } catch (err) {
+          console.error('Error clearing fraud warning:', err.message);
+        }
+      }
     }
     res.redirect('/admin/users');
   } catch (err) {
@@ -278,6 +289,13 @@ async function toggleDisable(req, res) {
   const disabled = req.body.disabled === '1';
   try {
     await UserModel.update(userId, { disabled });
+    if (!disabled) {
+      try {
+        await UserModel.clearFraudWarning(userId);
+      } catch (err) {
+        console.error('Error clearing fraud warning:', err.message);
+      }
+    }
     req.flash('success', disabled ? 'User disabled.' : 'User enabled.');
   } catch (err) {
     console.error('Error updating user disabled flag:', err.message);

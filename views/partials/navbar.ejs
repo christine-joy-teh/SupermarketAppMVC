@@ -95,3 +95,12 @@
     </div>
   </div>
 </nav>
+<%
+  const flashWarning = (typeof warning !== 'undefined' && Array.isArray(warning) && warning.length) ? warning[0] : null;
+  const alertMessage = fraudWarningMessage || flashWarning;
+%>
+<% if (alertMessage) { %>
+  <div class="alert alert-warning rounded-0 mb-0 text-center">
+    <%= alertMessage %>
+  </div>
+<% } %>

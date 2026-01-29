@@ -18,6 +18,17 @@ function isRefundEligible(order) {
   return Number.isFinite(amountValue) && amountValue > 0;
 }
 
+function resolveRefundUnitPrice(order, orderItem) {
+  const unitPrice = Number(orderItem && orderItem.unit_price) || 0;
+  const subtotal = Number(order && order.subtotal) || 0;
+  const total = Number(order && order.total) || 0;
+  if (!Number.isFinite(unitPrice) || unitPrice <= 0) return 0;
+  if (subtotal <= 0 || !Number.isFinite(subtotal)) return unitPrice;
+  const ratio = total > 0 ? Math.min(Math.max(total / subtotal, 0), 1) : 0;
+  const discounted = unitPrice * ratio;
+  return Number(discounted.toFixed(2));
+}
+
 async function renderRefundRequest(req, res) {
   const orderId = Number(req.query.orderId);
   if (!Number.isFinite(orderId)) {
@@ -174,7 +185,7 @@ async function submitRefundRequest(req, res) {
           req.flash('error', 'Refund quantity exceeds available quantity for an item.');
           return res.redirect(`/refunds/new?orderId=${orderId}`);
         }
-        const unitPrice = Number(orderItem.unit_price || 0);
+        const unitPrice = resolveRefundUnitPrice(order, orderItem);
         const refundAmount = Number((unitPrice * item.refundQty).toFixed(2));
         refundItems.push({
           orderItemId: orderItem.id,
@@ -207,7 +218,7 @@ async function submitRefundRequest(req, res) {
       await RefundModel.createRefundItems(refundId, refundItems);
     }
 
-    const recentCount = await RefundModel.countRecentByUserId(userId, 24);
+    const recentCount = await RefundModel.countRecentByUserId(userId, 1);
     if (recentCount >= 3) {
       await RefundModel.updateStatus(refundId, { status: 'flagged', adminNote: 'Auto-flagged due to frequent refunds.' });
       const flaggedUntilDate = new Date(Date.now() + (60 * 1000));
@@ -284,6 +295,35 @@ async function approveRefund(req, res) {
     let appliedToWallet = true;
 
     if (destination === 'ORIGINAL_METHOD' && paymentMethod === 'paypal' && order.paymentRef) {
+      let remainingCaptureAmount;
+      try {
+        const captureDetails = await paypalClient.getCapture(order.paymentRef);
+        const captureAmount = Number((captureDetails.amount && captureDetails.amount.value) || 0);
+        const refundedAmount = Number(
+          (captureDetails.seller_receivable_breakdown
+            && captureDetails.seller_receivable_breakdown.refunded_amount
+            && captureDetails.seller_receivable_breakdown.refunded_amount.value) || 0
+        );
+        remainingCaptureAmount = Math.max(0, captureAmount - refundedAmount);
+      } catch (captureErr) {
+        console.error('Error fetching PayPal capture details:', captureErr.message);
+        req.flash('error', 'Unable to verify PayPal capture before issuing refund.');
+        return res.redirect('/admin/refunds');
+      }
+
+      if (remainingCaptureAmount <= 0) {
+        req.flash('error', 'This PayPal capture has already been fully refunded.');
+        return res.redirect('/admin/refunds');
+      }
+
+      if (amountValue > remainingCaptureAmount + 1e-6) {
+        req.flash(
+          'error',
+          `PayPal capture only has SGD ${remainingCaptureAmount.toFixed(2)} available for refund; reduce the refund amount or credit the customer via the e-wallet instead.`
+        );
+        return res.redirect('/admin/refunds');
+      }
+
       await paypalClient.refundCapture(order.paymentRef, amountValue.toFixed(2));
       appliedToWallet = false;
     }
@@ -301,6 +341,14 @@ async function approveRefund(req, res) {
         actionType: 'REFUND',
         previousBalance: prevWallet,
         newBalance: nextWallet,
+        referenceId: refund.id
+      });
+    } else {
+      await TransactionLogModel.createLog({
+        userId: refundUserId,
+        actionType: 'REFUND',
+        previousBalance: null,
+        newBalance: null,
         referenceId: refund.id
       });
     }

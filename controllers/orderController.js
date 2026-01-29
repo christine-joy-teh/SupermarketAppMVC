@@ -528,13 +528,14 @@ async function renderUserOrders(req, res) {
   }
   try {
     const userId = resolveUserId(req.session.user);
-    const orders = await OrderModel.getOrdersByUser(userId);
+    const orders = await OrderModel.getOrdersByUserIdOnly(userId);
     const refunds = await RefundModel.getByUserId(userId);
     const refundsMap = refunds.reduce((acc, refund) => {
       if (!acc[refund.orderId]) acc[refund.orderId] = refund;
       return acc;
     }, {});
-    res.render('ordersHistory', { orders, refundsMap, user: req.session.user });
+    const emptyMessage = !orders.length ? 'No orders yet' : null;
+    res.render('ordersHistory', { orders, refundsMap, user: req.session.user, emptyMessage });
   } catch (err) {
     console.error('Error fetching user orders:', err.message);
     req.flash('error', 'Unable to load your orders right now.');

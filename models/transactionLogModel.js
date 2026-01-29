@@ -1,5 +1,6 @@
 const rawDb = require('../db');
 const db = rawDb.promise ? rawDb.promise() : rawDb;
+const UserModel = require('./userModel');
 
 let tableReady;
 
@@ -80,11 +81,12 @@ async function createLog({
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [userId, actionType, previousBalance, newBalance, referenceId, suspiciousFlag, suspiciousReason]
   );
+  await handleAutoDisableIfNeeded(userId, fraudResult);
   return result.insertId;
 }
 
-async function countRecentByUserAction(userId, actionType, minutes) {
-  const safeMinutes = Number(minutes) || 0;
+async function countRecentByUserAction(userId, actionType, windowMinutes) {
+  const safeMinutes = Number(windowMinutes) || 0;
   if (!safeMinutes) return 0;
   const [rows] = await db.query(
     `SELECT COUNT(*) AS total
@@ -95,131 +97,53 @@ async function countRecentByUserAction(userId, actionType, minutes) {
   return rows[0] ? Number(rows[0].total) || 0 : 0;
 }
 
+const PAYMENT_THRESHOLD = 5;
+const REFUND_THRESHOLD = 5;
+
 async function evaluateSuspiciousRules(payload = {}) {
   const userId = payload.userId;
   const actionType = payload.actionType;
-  const referenceId = payload.referenceId;
   if (!userId || !actionType) return { suspicious: false, reason: null };
   const normalized = String(actionType).toUpperCase();
   const reasons = [];
 
-  if (normalized === 'REFUND') {
-    const recent = await countRecentByUserAction(userId, 'REFUND', 10);
-    if (recent >= 2) {
-      reasons.push('3 refunds within 10 minutes');
-    }
-
-    if (referenceId) {
-      const refund = await getRefundById(referenceId);
-      if (refund && refund.orderId) {
-        const repeats = await countRefundsByOrder(refund.orderId);
-        if (repeats >= 2) {
-          reasons.push(`Multiple refunds for order #${refund.orderId}`);
-        }
-      }
-    }
-
-    const { refundTotal, orderTotal } = await getRefundRatioLastDays(userId, 3);
-    if (orderTotal > 0 && refundTotal / orderTotal > 0.5) {
-      reasons.push('Refund amount > 50% of spend in last 3 days');
-    }
-
-    const recentTopup = await hasRecentWalletTopup(userId, 30);
-    if (recentTopup) {
-      reasons.push('Refund shortly after wallet top-up');
-    }
-  }
-
   if (normalized === 'PAYMENT') {
-    const recent = await countRecentByUserAction(userId, 'PAYMENT', 2);
-    if (recent >= 2) {
-      reasons.push('3 payments within 2 minutes');
-    }
-    const daily = await countRecentByUserAction(userId, 'PAYMENT', 24 * 60);
-    if (daily >= 4) {
-      reasons.push('5 payments within 24 hours');
-    }
-
-    if (referenceId) {
-      const order = await getOrderById(referenceId);
-      const orderUserId = resolveOrderUserId(order);
-      if (order && orderUserId) {
-        const avg = await getUserAverageOrderTotal(orderUserId, order.id);
-        const total = Number(order.total || 0);
-        if (avg > 0 && total >= (avg * 3)) {
-          reasons.push('Order total is 3x higher than usual');
-        }
-      }
+    const recentPayments = await countRecentByUserAction(userId, 'PAYMENT', 3);
+    if (recentPayments + 1 >= PAYMENT_THRESHOLD) {
+      reasons.push(`${PAYMENT_THRESHOLD} transactions within 3 minutes`);
     }
   }
+
+  if (normalized === 'REFUND') {
+    const recentRefunds = await countRecentByUserAction(userId, 'REFUND', 1);
+    if (recentRefunds + 1 >= REFUND_THRESHOLD) {
+      reasons.push(`${REFUND_THRESHOLD} refund requests within 1 minute`);
+    }
+  }
+
   if (!reasons.length) return { suspicious: false, reason: null };
   return { suspicious: true, reason: reasons.join('; ').slice(0, 255) };
 }
 
-async function getRefundById(refundId) {
-  if (!refundId) return null;
-  const [rows] = await db.query('SELECT * FROM refunds WHERE id = ?', [refundId]);
-  return rows[0] || null;
-}
-
-async function countRefundsByOrder(orderId) {
-  if (!orderId) return 0;
-  const [rows] = await db.query('SELECT COUNT(*) AS total FROM refunds WHERE orderId = ?', [orderId]);
-  return rows[0] ? Number(rows[0].total) || 0 : 0;
-}
-
-async function getRefundRatioLastDays(userId, days = 3) {
-  const safeDays = Number(days) || 3;
-  const [refundRows] = await db.query(
-    `SELECT COALESCE(SUM(total_amount), 0) AS total
-     FROM refunds
-     WHERE userId = ? AND status = 'approved' AND createdAt >= (NOW() - INTERVAL ? DAY)`,
-    [userId, safeDays]
-  );
-  const [orderRows] = await db.query(
-    `SELECT COALESCE(SUM(total), 0) AS total
-     FROM orders
-     WHERE (userId = ? OR user_id = ?) AND createdAt >= (NOW() - INTERVAL ? DAY)`,
-    [userId, userId, safeDays]
-  );
-  return {
-    refundTotal: refundRows[0] ? Number(refundRows[0].total) || 0 : 0,
-    orderTotal: orderRows[0] ? Number(orderRows[0].total) || 0 : 0
-  };
-}
-
-async function hasRecentWalletTopup(userId, minutes = 30) {
-  const safeMinutes = Number(minutes) || 30;
-  const [rows] = await db.query(
-    `SELECT id FROM transaction_logs
-     WHERE user_id = ? AND action_type = 'PAYMENT' AND reference_id IS NULL
-     AND created_at >= (NOW() - INTERVAL ? MINUTE)
-     ORDER BY created_at DESC
-     LIMIT 1`,
-    [userId, safeMinutes]
-  );
-  return rows.length > 0;
-}
-
-async function getOrderById(orderId) {
-  if (!orderId) return null;
-  const [rows] = await db.query('SELECT * FROM orders WHERE id = ?', [orderId]);
-  return rows[0] || null;
-}
-
-function resolveOrderUserId(order) {
-  if (!order) return null;
-  return order.userId || order.user_id || null;
-}
-
-async function getUserAverageOrderTotal(userId, excludeOrderId = null) {
-  const [rows] = await db.query(
-    `SELECT AVG(total) AS avgTotal
-     FROM orders
-     WHERE (userId = ? OR user_id = ?) AND id <> ?`,
-    [userId, userId, excludeOrderId || 0]
-  );
-  return rows[0] ? Number(rows[0].avgTotal) || 0 : 0;
+async function handleAutoDisableIfNeeded(userId, fraudResult) {
+  if (!userId || !fraudResult || !fraudResult.suspicious) return;
+  try {
+    const user = await UserModel.getById(userId);
+    if (!user || user.disabled) return;
+    const warningReason = fraudResult && fraudResult.reason
+      ? String(fraudResult.reason).slice(0, 255)
+      : 'suspicious activity';
+    if (user.fraud_warning_sent_at) {
+      await UserModel.update(userId, { disabled: true });
+      await UserModel.clearFraudWarning(userId);
+      console.warn('Auto-disabling user due to repeated suspicious activity:', userId, warningReason);
+    } else {
+      await UserModel.markFraudWarningSent(userId, new Date(), warningReason);
+      console.warn('Issuing fraud warning for user:', userId, warningReason);
+    }
+  } catch (err) {
+    console.error('Auto disable workflow failed:', err.message);
+  }
 }
 
 module.exports = {

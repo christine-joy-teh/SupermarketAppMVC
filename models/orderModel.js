@@ -67,6 +67,7 @@ async function ensureOrdersTable() {
   await ensureColumn('status', "status VARCHAR(50) DEFAULT 'processing'");
   await ensureColumn('itemsJson', 'itemsJson LONGTEXT');
   await ensureColumn('createdAt', 'createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
+  await ensureColumn('confirmed_purchase_time', 'confirmed_purchase_time DATETIME NULL');
   await ensureColumn('deliveryMethod', "deliveryMethod VARCHAR(50) DEFAULT 'delivery'");
   await ensureColumn('deliveryAddress', "deliveryAddress VARCHAR(255) DEFAULT NULL");
   await ensureColumn('pickupOutlet', "pickupOutlet VARCHAR(255) DEFAULT NULL");
@@ -86,6 +87,15 @@ async function ensureOrdersTable() {
   } catch (err) {
     if (err.code !== 'ER_BAD_FIELD_ERROR') {
       console.warn('orders table migration (alter userId) skipped:', err.message);
+    }
+  }
+
+  // Backfill user_id from userId for legacy rows
+  try {
+    await db.query('UPDATE orders SET user_id = userId WHERE user_id IS NULL AND userId IS NOT NULL');
+  } catch (err) {
+    if (err.code !== 'ER_BAD_FIELD_ERROR') {
+      console.warn('orders table migration (backfill user_id) skipped:', err.message);
     }
   }
 
@@ -325,11 +335,56 @@ async function getConfirmedPurchaseTimeById(id) {
 
 async function getOrdersByUser(userId) {
   await tableReady;
-  const [rows] = await db.query(
-    'SELECT * FROM orders WHERE (userId = ? OR user_id = ?) ORDER BY id DESC',
-    [userId, userId]
-  );
-  return rows.map(mapOrderRow);
+  const safeUserId = Number(userId);
+  if (!Number.isFinite(safeUserId)) return [];
+  try {
+    const [rows] = await db.query(
+      `
+      SELECT o.*
+      FROM orders o
+      INNER JOIN users u ON u.id = ?
+      WHERE (o.userId = ? OR o.user_id = ?)
+        AND (u.createdAt IS NULL OR o.createdAt >= u.createdAt)
+      ORDER BY o.id DESC
+      `,
+      [safeUserId, safeUserId, safeUserId]
+    );
+    return rows.map(mapOrderRow);
+  } catch (err) {
+    if (err.code !== 'ER_BAD_FIELD_ERROR') throw err;
+    const [rows] = await db.query(
+      'SELECT * FROM orders WHERE (userId = ? OR user_id = ?) ORDER BY id DESC',
+      [safeUserId, safeUserId]
+    );
+    return rows.map(mapOrderRow);
+  }
+}
+
+async function getOrdersByUserIdOnly(userId) {
+  await tableReady;
+  const safeUserId = Number(userId);
+  if (!Number.isFinite(safeUserId)) return [];
+  try {
+    const [rows] = await db.query(
+      `
+      SELECT o.*
+      FROM orders o
+      INNER JOIN users u ON u.id = ?
+      WHERE o.user_id = ?
+        AND (u.createdAt IS NULL OR o.createdAt >= u.createdAt)
+      ORDER BY o.id DESC
+      `,
+      [safeUserId, safeUserId]
+    );
+    return rows.map(mapOrderRow);
+  } catch (err) {
+    if (err.code !== 'ER_BAD_FIELD_ERROR') throw err;
+    const [rows] = await db.query(
+      'SELECT * FROM orders WHERE user_id = ? ORDER BY id DESC',
+      [safeUserId]
+    );
+    return rows.map(mapOrderRow);
+  }
 }
 
 async function updateOrderStatus(id, status) {
@@ -377,6 +432,7 @@ module.exports = {
   getOrderById,
   getConfirmedPurchaseTimeById,
   getOrdersByUser,
+  getOrdersByUserIdOnly,
   updateOrderStatus,
   deleteOrder,
   getCartByUserId,
